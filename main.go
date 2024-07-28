@@ -5,7 +5,6 @@
 // Запускаем с аргументом, примерно так: go run main.go /.short_files
 // Символ ./ используется в bash-языке как символ относительного пути к текущему каталогу
 // ЗЫ - нужно создать файлы с содержимым
-
 package main
 
 import (
@@ -64,21 +63,18 @@ func main() {
 	var top, currentFrequency, lastFrecuency int
 	var buf []string
 	for _, elem := range frequencyWordsSlice {
+		if top > 10 {
+			break
+		}
 		currentFrequency = elem.frequency
+		if len(buf) > 0 && currentFrequency != lastFrecuency {
+			fmt.Printf("Топ %d частоты слов встречается по %d р.:\t%v\n", top, lastFrecuency, buf)
+			buf = nil
+		}
 		if currentFrequency != lastFrecuency {
-			if len(buf) > 0 {
-				fmt.Printf("Топ %d частоты слов встречается по %d р.:\t%v\n", top, lastFrecuency, buf)
-				buf = nil
-			}
 			top++
 			lastFrecuency = currentFrequency
-			if top > 10 {
-				break
-			}
 		}
 		buf = append(buf, elem.word)
-	}
-	if len(buf) > 0 {
-		fmt.Printf("\tТоп %d частоты слов встречается по %d р.: %v\n", top, lastFrecuency, buf)
 	}
 }
