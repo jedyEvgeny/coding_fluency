@@ -61,23 +61,24 @@ func main() {
 	sort.Slice(frequencyWordsSlice, func(i, j int) bool {
 		return frequencyWordsSlice[i].frequency > frequencyWordsSlice[j].frequency
 	})
-	var lastFrequency, currentFrequency int
-	var top, count int
+	var top, currentFrequency, lastFrecuency int
+	var buf []string
 	for _, elem := range frequencyWordsSlice {
 		currentFrequency = elem.frequency
-		if lastFrequency != currentFrequency && top != 0 {
-			fmt.Println()
-		}
-		if currentFrequency == 1 {
-			fmt.Printf("\tТоп %d: %d слов встречаются по %d разу", top+1, len(frequencyWordsSlice)-count, elem.frequency)
-			break
-		}
-		if lastFrequency != currentFrequency {
+		if currentFrequency != lastFrecuency {
+			if len(buf) > 0 {
+				fmt.Printf("Топ %d частоты слов встречается по %d р.:\t%v\n", top, lastFrecuency, buf)
+				buf = nil
+			}
 			top++
-			fmt.Printf("\tТоп %d слов встречается %d раз:", top, elem.frequency)
-			lastFrequency = currentFrequency
+			lastFrecuency = currentFrequency
+			if top > 10 {
+				break
+			}
 		}
-		fmt.Print(" ", elem.word)
-		count++
+		buf = append(buf, elem.word)
+	}
+	if len(buf) > 0 {
+		fmt.Printf("\tТоп %d частоты слов встречается по %d р.: %v\n", top, lastFrecuency, buf)
 	}
 }
