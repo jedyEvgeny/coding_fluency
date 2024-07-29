@@ -5,7 +5,7 @@
 // Символ ./ используется в bash-языке как символ относительного пути к текущему каталогу
 // ЗЫ - нужно создать файлы с содержимым
 
-// Лучшее время - 9 мин
+// Лучшее время - 9 мин 22 сек
 package main
 
 import (
@@ -35,15 +35,15 @@ func main() {
 		fullPathFile := filepath.Join(pathDir, fileEntry.Name())
 		contentFile, err := os.ReadFile(fullPathFile)
 		if err != nil {
-			log.Printf("содержимое файла %s не удалось прочитать: %s", fileEntry.Name(), err)
+			log.Println(err)
 			continue
 		}
 		words := strings.Fields(string(contentFile))
 		allWordsSlice = append(allWordsSlice, words...)
 	}
 	allWordsMap := make(map[string]int)
-	for _, val := range allWordsSlice {
-		allWordsMap[val]++
+	for _, el := range allWordsSlice {
+		allWordsMap[el]++
 	}
 	type frequencyWord struct {
 		word      string
@@ -57,23 +57,24 @@ func main() {
 		return frequencyWordsSlice[i].frequency > frequencyWordsSlice[j].frequency
 	})
 	var currentFrequency, lastFrequency, topWord int
-	var buf []string
-	for _, elem := range frequencyWordsSlice {
+	buf := make([]string, 0, 10)
+	for _, el := range frequencyWordsSlice {
 		if topWord > 10 {
 			break
 		}
-		currentFrequency = elem.frequency
+		currentFrequency = el.frequency
 		if currentFrequency != lastFrequency && len(buf) > 0 {
-			fmt.Printf("\tТоп №%d состоит из %d слов, которые встречаются по %d р.:\t%s\n", topWord, len(buf), lastFrequency, buf)
+			fmt.Printf("\tТоп №%d состоит из %d слов, встречающихся по %d р.: %s\n", topWord, len(buf), lastFrequency, buf)
 			buf = nil
 		}
 		if currentFrequency != lastFrequency {
 			lastFrequency = currentFrequency
 			topWord++
 		}
-		buf = append(buf, elem.word)
+		buf = append(buf, el.word)
 	}
 	if len(buf) > 0 && topWord < 11 {
-		fmt.Printf("\tТоп №%d состоит из %d слов, которые встречаются по %d р.\n", topWord, len(buf), lastFrequency)
+		fmt.Printf("\tТоп №%d состоит из %d слов, встречающихся по %d р.\n", topWord, len(buf), lastFrequency)
 	}
 }
+
