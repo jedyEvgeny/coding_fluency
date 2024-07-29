@@ -90,7 +90,3 @@ func main() {
 		fmt.Printf("\tТоп №%d состоит из %d слов, которые встречаются по %d р.\n", topWords, len(buf), lastFrequncy)
 	}
 }
-		fmt.Printf("\tТоп №%d состоит из %d слов, встречающихся по %d р.\n", topWord, len(buf), lastFrequency)
-	}
-}
-
