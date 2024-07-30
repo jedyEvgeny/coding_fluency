@@ -5,7 +5,7 @@
 // Символ ./ используется в bash-языке как символ относительного пути к текущему каталогу
 // ЗЫ - нужно создать файлы с содержимым
 
-// Лучшее время - 15 мин
+// Лучшее время - 11 мин 33 сек
 package main
 
 import (
@@ -17,11 +17,12 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"unicode"
 )
 
 var (
-	wg sync.WaitGroup
 	mu sync.RWMutex
+	wg sync.WaitGroup
 )
 
 func main() {
@@ -47,49 +48,49 @@ func main() {
 				log.Println(err)
 				return
 			}
-			words := strings.Fields(string(contentFile))
+			words := strings.FieldsFunc(string(contentFile), func(r rune) bool {
+				return !unicode.IsLetter(r) && !unicode.IsNumber(r)
+			})
 			mu.Lock()
 			allWordsSlice = append(allWordsSlice, words...)
 			mu.Unlock()
 		}(fileEntry)
 	}
 	wg.Wait()
-	log.Println("Общее количество слов:", len(allWordsSlice))
 	allWordsMap := make(map[string]int)
 	for _, el := range allWordsSlice {
 		allWordsMap[el]++
 	}
-	log.Println("Количество уникальных слов:", len(allWordsMap))
-	type frequencyWord struct {
+	type frequncyWord struct {
 		word      string
 		frequency int
 	}
-	frequencyWordsSlice := make([]frequencyWord, 0, 10)
+	frequencyWordsSlice := make([]frequncyWord, 0, 10)
 	for key, val := range allWordsMap {
-		frequencyWordsSlice = append(frequencyWordsSlice, frequencyWord{key, val})
+		frequencyWordsSlice = append(frequencyWordsSlice, frequncyWord{key, val})
 	}
 	sort.Slice(frequencyWordsSlice, func(i, j int) bool {
 		return frequencyWordsSlice[i].frequency > frequencyWordsSlice[j].frequency
 	})
 	var currentFrequency, lastFrequency, topWords int
-	bufStrings := make([]string, 0, 10)
+	buf := make([]string, 0, 10)
 	for _, el := range frequencyWordsSlice {
 		if topWords > 10 {
 			break
 		}
 		currentFrequency = el.frequency
-		if currentFrequency != lastFrequency && len(bufStrings) > 0 {
-			fmt.Printf("Топ №%d состоит из %d слов, которые встречаются по %d р.: %s\n", topWords, len(bufStrings), lastFrequency, bufStrings)
-			bufStrings = nil
+		if currentFrequency != lastFrequency && len(buf) > 0 {
+			fmt.Printf("Топ №%d состоит из %d слов, которые встречаются %d р.: %s\n", topWords, len(buf), lastFrequency, buf)
+			buf = nil
 		}
 		if currentFrequency != lastFrequency {
 			lastFrequency = currentFrequency
 			topWords++
 		}
-		bufStrings = append(bufStrings, el.word)
+		buf = append(buf, el.word)
 	}
-	if len(bufStrings) > 0 && topWords < 11 {
-		fmt.Printf("Топ №%d состоит из %d слов, которые встречаются по %d р.:\n", topWords, len(bufStrings), lastFrequency)
+	if len(buf) > 0 && topWords < 11 {
+		fmt.Printf("Топ №%d состоит из %d слов, которые встречаются %d р.\n", topWords, len(buf), lastFrequency)
 	}
 }
 
