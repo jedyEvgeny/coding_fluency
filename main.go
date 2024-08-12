@@ -6,7 +6,7 @@
 // ЗЫ - нужно заранее создать файлы с содержимым, а также go mod для тестов
 // ЗЗЫ - начинаю отсчёт времени с создания файлов .go, котороые создаю через консоль touch main.go 
 
-// Лучшее время с тестами - 16 мин 48 сек
+// Лучшее время с тестами но без функции createRequest - 16 мин 48 сек
 // После четырёх дней отдыха на морях, приехав вечером и уставшим, время набора - 17 мин 42 сек
 package main
 
@@ -14,7 +14,10 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"net/http"
+	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -96,4 +99,28 @@ func main() {
 	if len(buf) > 0 && topWords < 11 {
 		fmt.Printf("Топ №%d состоит из %d слов, встречающихся по %d р.\n", topWords, len(buf), lastFrequency)
 	}
+
+	createRequest()
 }
+
+func createRequest() {
+	host := "api.telegram.org"
+	basePath := "bot1234567890"
+	method := "getUpdates"
+	u := url.URL{
+		Scheme: "https",
+		Host:   host,
+		Path:   path.Join(basePath, method),
+	}
+	log.Println(u.String())
+	req, _ := http.NewRequest(http.MethodGet, u.String(), nil)
+	log.Println(req)
+
+	query := url.Values{}
+	query.Add("chat_id", "12345")
+	query.Add("text", "абвгдеж")
+	req.URL.RawQuery = query.Encode()
+	fmt.Println()
+	fmt.Println(req)
+}
+
