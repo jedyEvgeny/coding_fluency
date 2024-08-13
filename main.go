@@ -6,7 +6,7 @@
 // ЗЫ - нужно заранее создать файлы с содержимым, а также go mod для тестов
 // ЗЗЫ - начинаю отсчёт времени с создания файлов .go, котороые создаю через консоль touch main.go 
 
-// Лучшее время с тестами но без функции createRequest - 16 мин 48 сек
+// Лучшее время с тестами - 21 мин 07 сек
 // После четырёх дней отдыха на морях, приехав вечером и уставшим, время набора - 17 мин 42 сек
 package main
 
@@ -103,6 +103,7 @@ func main() {
 	createRequest()
 }
 
+
 func createRequest() {
 	host := "api.telegram.org"
 	basePath := "bot1234567890"
@@ -117,10 +118,11 @@ func createRequest() {
 	log.Println(req)
 
 	query := url.Values{}
-	query.Add("chat_id", "12345")
-	query.Add("text", "абвгдеж")
+	query.Add("chat_id", "1234560")
+	query.Add("text", "Hello, Telegram")
+	log.Println(query)
+
 	req.URL.RawQuery = query.Encode()
-	fmt.Println()
-	fmt.Println(req)
+	log.Println(req)
 }
 
