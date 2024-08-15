@@ -6,7 +6,7 @@
 // ЗЫ - нужно заранее создать файлы с содержимым, а также go mod для тестов
 // ЗЗЫ - начинаю отсчёт времени с создания файлов .go, котороые создаю через консоль touch main.go 
 
-// Лучшее время с тестами - 19 мин 15 сек
+// Лучшее время с тестами без сервера и переменной result - 19 мин 15 сек
 // После четырёх дней отдыха на морях, приехав вечером и уставшим, время набора - 17 мин 42 сек
 package main
 
@@ -81,13 +81,16 @@ func main() {
 	})
 	var currentFrequency, lastFrequency, topWords int
 	buf := make([]string, 0, 10)
+	var result string
 	for _, el := range frequencyWordsSlice {
 		if topWords > 10 {
 			break
 		}
 		currentFrequency = el.frequency
 		if currentFrequency != lastFrequency && len(buf) > 0 {
-			fmt.Printf("Топ №%d состоит из %d слов, встречающихся по %d р.: %s\n", topWords, len(buf), lastFrequency, buf)
+			str := fmt.Sprintf("Топ №%d состоит из %d слов, встречающихся по %d р.: %s\n", topWords, len(buf), lastFrequency, buf)
+			fmt.Printf(str)
+			result += str
 			buf = nil
 		}
 		if currentFrequency != lastFrequency {
@@ -97,10 +100,22 @@ func main() {
 		buf = append(buf, el.word)
 	}
 	if len(buf) > 0 && topWords < 11 {
-		fmt.Printf("Топ №%d состоит из %d слов, встречающихся по %d р.\n", topWords, len(buf), lastFrequency)
+		str := fmt.Sprintf("Топ №%d состоит из %d слов, встречающихся по %d р.\n", topWords, len(buf), lastFrequency)
+		fmt.Printf(str)
+		result += str
 	}
 
 	createRequest()
+
+	handler := func(w http.ResponseWriter, r *http.Request) { serveWords(w, r, result) }
+	http.HandleFunc("/words", handler)
+	log.Println("Запустили сервер")
+	http.ListenAndServe(":8080", nil)
+}
+
+func serveWords(w http.ResponseWriter, r *http.Request, result string) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	fmt.Fprint(w, result)
 }
 
 
