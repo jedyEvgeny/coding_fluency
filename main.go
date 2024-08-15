@@ -6,7 +6,7 @@
 // ЗЫ - нужно заранее создать файлы с содержимым, а также go mod для тестов
 // ЗЗЫ - начинаю отсчёт времени с создания файлов .go, котороые создаю через консоль touch main.go 
 
-// Лучшее время с тестами без сервера и переменной result - 19 мин 15 сек
+// Лучшее время с тестами - 28 мин 37 сек
 // После четырёх дней отдыха на морях, приехав вечером и уставшим, время набора - 17 мин 42 сек
 package main
 
@@ -26,14 +26,14 @@ import (
 )
 
 var (
-	wg sync.WaitGroup
 	mu sync.Mutex
+	wg sync.WaitGroup
 )
 
-func findAllWords(slice *[]string, dir string, entry fs.DirEntry) {
+func findAllWords(slice *[]string, path string, entry fs.DirEntry) {
 	defer wg.Done()
-	fullFilePath := filepath.Join(dir, entry.Name())
-	content, err := os.ReadFile(fullFilePath)
+	fullFPath := filepath.Join(path, entry.Name())
+	content, err := os.ReadFile(fullFPath)
 	if err != nil {
 		log.Println(err)
 		return
@@ -47,11 +47,11 @@ func findAllWords(slice *[]string, dir string, entry fs.DirEntry) {
 }
 
 func main() {
-	pathDir := "./files"
+	fPath := "./files"
 	if len(os.Args) == 2 {
-		pathDir = os.Args[1]
+		fPath = os.Args[1]
 	}
-	filesList, err := os.ReadDir(pathDir)
+	filesList, err := os.ReadDir(fPath)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -61,35 +61,37 @@ func main() {
 			continue
 		}
 		wg.Add(1)
-		go findAllWords(&allWordsSlice, pathDir, fileEntry)
+		go findAllWords(&allWordsSlice, fPath, fileEntry)
 	}
 	wg.Wait()
 	allWordsMap := make(map[string]int)
 	for _, el := range allWordsSlice {
 		allWordsMap[el]++
 	}
+
 	type frequencyWord struct {
 		word      string
 		frequency int
 	}
-	frequencyWordsSlice := make([]frequencyWord, 0, 10)
+	frequencyWordSlice := make([]frequencyWord, 0, 10)
 	for key, val := range allWordsMap {
-		frequencyWordsSlice = append(frequencyWordsSlice, frequencyWord{key, val})
+		frequencyWordSlice = append(frequencyWordSlice, frequencyWord{key, val})
 	}
-	sort.Slice(frequencyWordsSlice, func(i, j int) bool {
-		return frequencyWordsSlice[i].frequency > frequencyWordsSlice[j].frequency
+	sort.Slice(frequencyWordSlice, func(i, j int) bool {
+		return frequencyWordSlice[i].frequency > frequencyWordSlice[j].frequency
 	})
 	var currentFrequency, lastFrequency, topWords int
 	buf := make([]string, 0, 10)
 	var result string
-	for _, el := range frequencyWordsSlice {
-		if topWords > 10 {
+
+	for _, el := range frequencyWordSlice {
+		if topWords > 11 {
 			break
 		}
 		currentFrequency = el.frequency
 		if currentFrequency != lastFrequency && len(buf) > 0 {
 			str := fmt.Sprintf("Топ №%d состоит из %d слов, встречающихся по %d р.: %s\n", topWords, len(buf), lastFrequency, buf)
-			fmt.Printf(str)
+			fmt.Print(str)
 			result += str
 			buf = nil
 		}
@@ -101,27 +103,17 @@ func main() {
 	}
 	if len(buf) > 0 && topWords < 11 {
 		str := fmt.Sprintf("Топ №%d состоит из %d слов, встречающихся по %d р.\n", topWords, len(buf), lastFrequency)
-		fmt.Printf(str)
+		fmt.Print(str)
 		result += str
 	}
 
 	createRequest()
-
-	handler := func(w http.ResponseWriter, r *http.Request) { serveWords(w, r, result) }
-	http.HandleFunc("/words", handler)
-	log.Println("Запустили сервер")
-	http.ListenAndServe(":8080", nil)
+	createServer(result)
 }
-
-func serveWords(w http.ResponseWriter, r *http.Request, result string) {
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	fmt.Fprint(w, result)
-}
-
 
 func createRequest() {
 	host := "api.telegram.org"
-	basePath := "bot1234567890"
+	basePath := "bot" + "1234567890"
 	method := "getUpdates"
 	u := url.URL{
 		Scheme: "https",
@@ -134,10 +126,21 @@ func createRequest() {
 
 	query := url.Values{}
 	query.Add("chat_id", "1234560")
-	query.Add("text", "Hello, Telegram")
-	log.Println(query)
-
+	query.Add("text", "Hello, Telegram!")
 	req.URL.RawQuery = query.Encode()
 	log.Println(req)
+}
+
+func createServer(result string) {
+	log.Println("Запускаем сервер")
+	handler := func(w http.ResponseWriter, r *http.Request) { serveWords(w, r, result) }
+	http.HandleFunc("/words", handler)
+	log.Println("Запустили сервер")
+	http.ListenAndServe(":8080", nil)
+}
+
+func serveWords(w http.ResponseWriter, r *http.Request, result string) {
+	w.Header().Set("Content-type", "text/plain; charset=utf-8")
+	fmt.Fprint(w, result)
 }
 
