@@ -6,7 +6,7 @@
 // ЗЫ - нужно заранее создать файлы с содержимым, а также go mod для тестов
 // ЗЗЫ - начинаю отсчёт времени с создания файлов .go, котороые создаю через консоль touch main.go 
 
-// Лучшее время с тестами - 28 мин 37 сек
+// Лучшее время: - 26 мин 45 сек, включая удаление предыдущих файлов main и main_test через терминал, запуск приложения в терминале, проверка ответа в браузере
 // После четырёх дней отдыха на морях, приехав вечером и уставшим, время набора - 17 мин 42 сек
 package main
 
@@ -26,32 +26,16 @@ import (
 )
 
 var (
-	mu sync.Mutex
 	wg sync.WaitGroup
+	mu sync.Mutex
 )
 
-func findAllWords(slice *[]string, path string, entry fs.DirEntry) {
-	defer wg.Done()
-	fullFPath := filepath.Join(path, entry.Name())
-	content, err := os.ReadFile(fullFPath)
-	if err != nil {
-		log.Println(err)
-		return
-	}
-	words := strings.FieldsFunc(string(content), func(r rune) bool {
-		return !unicode.IsLetter(r) && !unicode.IsNumber(r)
-	})
-	mu.Lock()
-	*slice = append(*slice, words...)
-	mu.Unlock()
-}
-
 func main() {
-	fPath := "./files"
+	filesDir := "./files"
 	if len(os.Args) == 2 {
-		fPath = os.Args[1]
+		filesDir = os.Args[1]
 	}
-	filesList, err := os.ReadDir(fPath)
+	filesList, err := os.ReadDir(filesDir)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -61,31 +45,29 @@ func main() {
 			continue
 		}
 		wg.Add(1)
-		go findAllWords(&allWordsSlice, fPath, fileEntry)
+		go findAllWords(&allWordsSlice, filesDir, fileEntry)
 	}
 	wg.Wait()
 	allWordsMap := make(map[string]int)
 	for _, el := range allWordsSlice {
 		allWordsMap[el]++
 	}
-
 	type frequencyWord struct {
 		word      string
 		frequency int
 	}
-	frequencyWordSlice := make([]frequencyWord, 0, 10)
+	frequencyWordsSlice := make([]frequencyWord, 0, 10)
 	for key, val := range allWordsMap {
-		frequencyWordSlice = append(frequencyWordSlice, frequencyWord{key, val})
+		frequencyWordsSlice = append(frequencyWordsSlice, frequencyWord{key, val})
 	}
-	sort.Slice(frequencyWordSlice, func(i, j int) bool {
-		return frequencyWordSlice[i].frequency > frequencyWordSlice[j].frequency
+	sort.Slice(frequencyWordsSlice, func(i, j int) bool {
+		return frequencyWordsSlice[i].frequency > frequencyWordsSlice[j].frequency
 	})
 	var currentFrequency, lastFrequency, topWords int
 	buf := make([]string, 0, 10)
 	var result string
-
-	for _, el := range frequencyWordSlice {
-		if topWords > 11 {
+	for _, el := range frequencyWordsSlice {
+		if topWords > 10 {
 			break
 		}
 		currentFrequency = el.frequency
@@ -111,6 +93,22 @@ func main() {
 	createServer(result)
 }
 
+func findAllWords(slice *[]string, path string, entry fs.DirEntry) {
+	defer wg.Done()
+	fullFName := filepath.Join(path, entry.Name())
+	content, err := os.ReadFile(fullFName)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	words := strings.FieldsFunc(string(content), func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsNumber(r)
+	})
+	mu.Lock()
+	*slice = append(*slice, words...)
+	mu.Unlock()
+}
+
 func createRequest() {
 	host := "api.telegram.org"
 	basePath := "bot" + "1234567890"
@@ -127,20 +125,19 @@ func createRequest() {
 	query := url.Values{}
 	query.Add("chat_id", "1234560")
 	query.Add("text", "Hello, Telegram!")
+	log.Println(query)
 	req.URL.RawQuery = query.Encode()
 	log.Println(req)
 }
 
 func createServer(result string) {
-	log.Println("Запускаем сервер")
-	handler := func(w http.ResponseWriter, r *http.Request) { serveWords(w, r, result) }
+	handler := func(w http.ResponseWriter, r *http.Request) { handWords(w, r, result) }
 	http.HandleFunc("/words", handler)
-	log.Println("Запустили сервер")
+	log.Println("Запускаем сервер:")
 	http.ListenAndServe(":8080", nil)
 }
 
-func serveWords(w http.ResponseWriter, r *http.Request, result string) {
-	w.Header().Set("Content-type", "text/plain; charset=utf-8")
+func handWords(w http.ResponseWriter, _ *http.Request, result string) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	fmt.Fprint(w, result)
 }
-
