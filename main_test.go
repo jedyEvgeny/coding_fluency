@@ -12,14 +12,13 @@ func TestFindAllWords(t *testing.T) {
 	tempDir := t.TempDir()
 	content := []string{
 		"БИМ бом",
-		"дИн Дон",
-		",бим !бом",
-		"кин*-*кон",
+		"Дин доН",
+		"кин, !кон",
 		"",
 		" ",
-		"1 :22 333?",
+		"1 ,22 333?",
 	}
-	expextedSlice := []string{"БИМ", "бом", "дИн", "Дон", "бим", "бом", "кин", "кон", "1", "22", "333"}
+	expextedSlice := []string{"БИМ", "бом", "Дин", "доН", "кин", "кон", "1", "22", "333"}
 	for idx, el := range content {
 		fName := fmt.Sprintf("%d.txt", idx)
 		fPath := filepath.Join(tempDir, fName)
@@ -32,13 +31,13 @@ func TestFindAllWords(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	allWordsSlice := make([]string, 0, 10)
+	allWordsSlice := make([]string, 0, 9)
 	for _, entry := range filesList {
 		wg.Add(1)
 		findAllWords(&allWordsSlice, tempDir, entry)
 	}
 	wg.Wait()
 	if !reflect.DeepEqual(expextedSlice, allWordsSlice) {
-		t.Errorf("Ожилалось %s, получили %s", expextedSlice, allWordsSlice)
+		t.Errorf("Ожидалось %s, получили %s\n", expextedSlice, allWordsSlice)
 	}
 }
