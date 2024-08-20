@@ -6,12 +6,10 @@
 // ЗЫ - нужно заранее создать файлы с содержимым, а также go mod для тестов
 // ЗЗЫ - начинаю отсчёт времени с создания файлов .go, котороые создаю через консоль touch main.go 
 
-// Лучшее время: - 41 мин, включая удаление предыдущих файлов main и main_test через терминал, 
-// запуск приложения в терминале, проверка ответа в браузере, запуск тестов. Импорты подтягиваю автоматически
-
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"log"
@@ -179,13 +177,42 @@ func (a *App) basePath() string {
 }
 
 func (a *App) createServer(result string) {
-	handler := func(w http.ResponseWriter, r *http.Request) { handleWords(w, r, result) }
+	handlerWords := func(w http.ResponseWriter, r *http.Request) { handleWords(w, r, result) }
+	handlerJSON := func(w http.ResponseWriter, r *http.Request) { handleJSON(w, r, result) }
+	http.HandleFunc(a.Endpoint, handlerWords)
+	http.HandleFunc("/json", handlerJSON)
+
 	log.Println("Начинаем слушать сервер:")
-	http.HandleFunc(a.Endpoint, handler)
-	http.ListenAndServe(a.Port, nil)
+
+	err := http.ListenAndServe(a.Port, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
 }
 
-func handleWords(w http.ResponseWriter, _ *http.Request, result string) {
-	w.Header().Set("Content-type", "text/plaing; charset=utf-8")
+func handleWords(w http.ResponseWriter, r *http.Request, result string) {
+	log.Println("Получили запрос")
+	w.Header().Set("Content-type", "text/plain; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
 	fmt.Fprint(w, result)
+}
+
+func handleJSON(w http.ResponseWriter, _ *http.Request, result string) {
+	log.Println("Получили запрос")
+
+	w.Header().Set("Content-Type", "application/json")
+
+	data := map[string]string{
+		"message": "Успех",
+		"result":  result,
+	}
+
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println(err)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	w.Write(jsonData)
 }
