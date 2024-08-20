@@ -3,6 +3,8 @@
 // Первый блок кода читает файлы и выводит топ-10 слов
 // Запускаем с аргументом, примерно так: go run main.go ./short_files
 // Символ ./ используется в bash-языке как символ относительного пути к текущему каталогу
+
+// Лучшее время набора - 49 мин 07 сек, в т.ч. тесты, создание файлов и т.д. - но импорты вручную не прописываю.
 // ЗЫ - нужно заранее создать файлы с содержимым, а также go mod для тестов
 // ЗЗЫ - начинаю отсчёт времени с создания файлов .go, котороые создаю через консоль touch main.go 
 
@@ -24,27 +26,35 @@ import (
 	"unicode"
 )
 
-var (
-	filesDir = "./files"
-	endpoint = "/words"
-	port     = ":8080"
-	topWords = 10
-	host     = "api.telegram.org"
-	method   = "getUpdates"
-	scheme   = "https"
-)
-
 type App struct {
-	FilesDir    string
-	Endpoint    string
-	Port        string
-	Host        string
-	Method      string
-	Scheme      string
-	mu          sync.Mutex
-	wg          sync.WaitGroup
-	maxTopWords int
+	wg            sync.WaitGroup
+	mu            sync.Mutex
+	baseFailsDir  string
+	needsTopWords int
+	host          string
+	method        string
+	basePath      string
+	scheme        string
+	endpointWords string
+	endpointJSON  string
+	port          string
 }
+
+type frequencyWord struct {
+	word      string
+	frequency int
+}
+
+var (
+	filesDir      = "./files"
+	needsTopWords = 10
+	host          = "api.telegram.org"
+	method        = "getUpdates"
+	scheme        = "https"
+	endpointWords = "/words"
+	endpointJSON  = "/json"
+	port          = ":8080"
+)
 
 func main() {
 	a := New()
@@ -56,60 +66,64 @@ func main() {
 
 func New() App {
 	return App{
-		FilesDir:    dir(),
-		Port:        port,
-		Endpoint:    endpoint,
-		maxTopWords: topWords,
-		Host:        host,
-		Method:      method,
-		Scheme:      scheme,
+		baseFailsDir:  baseFailsDir(),
+		needsTopWords: needsTopWords,
+		host:          host,
+		method:        method,
+		basePath:      basePath(),
+		scheme:        scheme,
+		endpointWords: endpointWords,
+		endpointJSON:  endpointJSON,
+		port:          port,
 	}
 }
 
-func dir() string {
+func baseFailsDir() string {
 	if len(os.Args) == 2 {
 		filesDir = os.Args[1]
 	}
 	return filesDir
 }
 
+func basePath() string {
+	return path.Join("bot" + "1234567890")
+}
+
 func (a *App) Run() error {
-	filesList, err := os.ReadDir(a.FilesDir)
+	filesList, err := os.ReadDir(a.baseFailsDir)
 	if err != nil {
 		return err
 	}
-	allWordsSlice := make([]string, 0, 10)
+	allWords := make([]string, 0, 10)
 	for _, fileEntry := range filesList {
 		if fileEntry.IsDir() {
 			continue
 		}
 		a.wg.Add(1)
-		go a.findAllWords(&allWordsSlice, fileEntry)
+		go a.findAllWords(&allWords, fileEntry)
 	}
 	a.wg.Wait()
 
-	allWordsMap := make(map[string]int)
-	for _, el := range allWordsSlice {
-		allWordsMap[el]++
+	uniqueWords := make(map[string]int)
+	for _, el := range allWords {
+		uniqueWords[el]++
 	}
-	type frequencyWord struct {
-		frequency int
-		word      string
+
+	frequencyWords := make([]frequencyWord, 0, 10)
+	for key, val := range uniqueWords {
+		frequencyWords = append(frequencyWords, frequencyWord{key, val})
 	}
-	frequencyWordsSlice := make([]frequencyWord, 0, 10)
-	for key, val := range allWordsMap {
-		frequencyWordsSlice = append(frequencyWordsSlice, frequencyWord{val, key})
-	}
-	sort.Slice(frequencyWordsSlice, func(i, j int) bool {
-		return frequencyWordsSlice[i].frequency > frequencyWordsSlice[j].frequency
+
+	sort.Slice(frequencyWords, func(i, j int) bool {
+		return frequencyWords[i].frequency > frequencyWords[j].frequency
 	})
 
 	var currentFrequency, lastFrequency, topWords int
 	buf := make([]string, 0, 10)
-	result := ""
+	var result string
 
-	for _, el := range frequencyWordsSlice {
-		if topWords > a.maxTopWords {
+	for _, el := range frequencyWords {
+		if topWords > a.needsTopWords {
 			break
 		}
 		currentFrequency = el.frequency
@@ -125,20 +139,20 @@ func (a *App) Run() error {
 		}
 		buf = append(buf, el.word)
 	}
-	if len(buf) > 0 && topWords < a.maxTopWords+1 {
+	if len(buf) > 0 && topWords < a.needsTopWords+1 {
 		str := fmt.Sprintf("Топ №%d состоит из %d слов, встречающихся по %d р.\n", topWords, len(buf), lastFrequency)
 		result += str
 		fmt.Print(str)
 	}
 
 	a.createRequest()
-	a.createServer(result)
+	a.startServer(result)
 	return nil
 }
 
 func (a *App) findAllWords(slice *[]string, entry fs.DirEntry) {
 	defer a.wg.Done()
-	fullFPath := filepath.Join(a.FilesDir, entry.Name())
+	fullFPath := filepath.Join(a.baseFailsDir, entry.Name())
 	content, err := os.ReadFile(fullFPath)
 	if err != nil {
 		log.Println(err)
@@ -154,64 +168,59 @@ func (a *App) findAllWords(slice *[]string, entry fs.DirEntry) {
 
 func (a *App) createRequest() {
 	u := url.URL{
-		Scheme: a.Scheme,
-		Path:   a.basePath(),
-		Host:   a.Host,
+		Scheme: a.scheme,
+		Path:   path.Join(a.method, a.basePath),
+		Host:   a.host,
 	}
 	log.Println(u.String())
-	req, _ := http.NewRequest(http.MethodGet, u.String(), nil)
+	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
+	if err != nil {
+		log.Println(err)
+	}
 	log.Println(req)
 
 	query := url.Values{}
-	query.Add("chat_id", "12345670")
-	query.Add("text", "Hello, Telegram")
+	query.Add("chat_id", "1234560")
+	query.Add("text", "Hello, Telegram!")
 	log.Println(query)
 
 	req.URL.RawQuery = query.Encode()
 	log.Println(req)
 }
 
-func (a *App) basePath() string {
-	basePath := "bot" + "123456"
-	return path.Join(a.Method, basePath)
-}
-
-func (a *App) createServer(result string) {
-	handlerWords := func(w http.ResponseWriter, r *http.Request) { handleWords(w, r, result) }
+func (a *App) startServer(result string) {
+	handlerWords := func(w http.ResponseWriter, r *http.Request) { handlWords(w, r, result) }
 	handlerJSON := func(w http.ResponseWriter, r *http.Request) { handleJSON(w, r, result) }
-	http.HandleFunc(a.Endpoint, handlerWords)
-	http.HandleFunc("/json", handlerJSON)
+	http.HandleFunc(a.endpointWords, handlerWords)
+	http.HandleFunc(a.endpointJSON, handlerJSON)
 
-	log.Println("Начинаем слушать сервер:")
-
-	err := http.ListenAndServe(a.Port, nil)
+	log.Println("Начали слушать порт:")
+	err := http.ListenAndServe(a.port, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
 }
 
-func handleWords(w http.ResponseWriter, r *http.Request, result string) {
-	log.Println("Получили запрос")
-	w.Header().Set("Content-type", "text/plain; charset=utf-8")
+func handlWords(w http.ResponseWriter, _ *http.Request, result string) {
+	log.Println("Получен запрос")
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprint(w, result)
 }
 
 func handleJSON(w http.ResponseWriter, _ *http.Request, result string) {
-	log.Println("Получили запрос")
-
+	log.Println("Получен запрос")
 	w.Header().Set("Content-Type", "application/json")
 
 	data := map[string]string{
-		"message": "Успех",
+		"message": "Успех!",
 		"result":  result,
 	}
 
 	jsonData, err := json.Marshal(data)
 	if err != nil {
+		log.Println("Не смогли преобразовать объект в json")
 		w.WriteHeader(http.StatusInternalServerError)
-		log.Println(err)
-		return
 	}
 	w.WriteHeader(http.StatusOK)
 	w.Write(jsonData)
