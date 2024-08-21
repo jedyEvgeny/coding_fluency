@@ -224,3 +224,278 @@ func handleJSON(w http.ResponseWriter, _ *http.Request, result string) {
 	w.WriteHeader(http.StatusOK)
 	w.Write(jsonData)
 }
+
+package main
+
+// import (
+// 	"crypto/sha1"
+// 	"encoding/json"
+// 	"fmt"
+// 	"io"
+// 	"io/fs"
+// 	"log"
+// 	"net/http"
+// 	"net/url"
+// 	"os"
+// 	"path"
+// 	"path/filepath"
+// 	"sort"
+// 	"strings"
+// 	"sync"
+// 	"unicode"
+// )
+
+// type App struct {
+// 	wg            sync.WaitGroup
+// 	mu            sync.Mutex
+// 	filesPath     string
+// 	maxTopWord    int
+// 	host          string
+// 	scheme        string
+// 	basePath      string
+// 	method        string
+// 	endpointWords string
+// 	endpointJSON  string
+// 	port          string
+// }
+
+// type frequencyWord struct {
+// 	word      string
+// 	frequency int
+// }
+
+// var (
+// 	filesPath     = "./files"
+// 	maxTopWord    = 10
+// 	scheme        = "https"
+// 	host          = "api.telegram.org"
+// 	method        = "getUpdates"
+// 	endpointJSON  = "/json"
+// 	endpointWords = "/words"
+// 	port          = ":8080"
+// )
+
+// func main() {
+// 	a := New()
+// 	err := a.Run()
+// 	if err != nil {
+// 		log.Fatal(err)
+// 	}
+// }
+
+// func New() App {
+// 	return App{
+// 		filesPath:     findBasePath(),
+// 		maxTopWord:    maxTopWord,
+// 		scheme:        scheme,
+// 		host:          host,
+// 		method:        method,
+// 		basePath:      basePath(),
+// 		port:          port,
+// 		endpointWords: endpointWords,
+// 		endpointJSON:  endpointJSON,
+// 	}
+// }
+
+// func findBasePath() string {
+// 	if len(os.Args) == 2 {
+// 		filesPath = os.Args[1]
+// 	}
+// 	return filesPath
+// }
+
+// func basePath() string {
+// 	return "bot" + "1234567890"
+// }
+
+// func (a *App) Run() error {
+// 	filesList, err := os.ReadDir(a.filesPath)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	allWords := make([]string, 0, 10)
+// 	for _, fileEntry := range filesList {
+// 		if fileEntry.IsDir() {
+// 			continue
+// 		}
+// 		a.wg.Add(1)
+// 		go a.findWords(&allWords, fileEntry)
+// 	}
+// 	a.wg.Wait()
+
+// 	uniqueWords := make(map[string]int)
+// 	for _, el := range allWords {
+// 		uniqueWords[el]++
+// 	}
+
+// 	frequencyWords := make([]frequencyWord, 0, 10)
+// 	for key, val := range uniqueWords {
+// 		frequencyWords = append(frequencyWords, frequencyWord{key, val})
+// 	}
+
+// 	sort.Slice(frequencyWords, func(i, j int) bool {
+// 		return frequencyWords[i].frequency > frequencyWords[j].frequency
+// 	})
+
+// 	var currentFrequency, lastFrequency, topWords int
+// 	buf := make([]string, 0, 10)
+// 	var result string
+// 	for _, el := range frequencyWords {
+// 		if topWords > a.maxTopWord {
+// 			break
+// 		}
+// 		currentFrequency = el.frequency
+// 		if currentFrequency != lastFrequency && len(buf) > 0 {
+// 			str := fmt.Sprintf("Топ №%d состоит из %d слов, встречающихся по %d р.: %s\n", topWords, len(buf), lastFrequency, buf)
+// 			result += str
+// 			fmt.Print(str)
+// 			buf = nil
+// 		}
+// 		if currentFrequency != lastFrequency {
+// 			topWords++
+// 			lastFrequency = currentFrequency
+// 		}
+// 		buf = append(buf, el.word)
+// 	}
+// 	if len(buf) > 1 && topWords < a.maxTopWord+1 {
+// 		str := fmt.Sprintf("Топ №%d состоит из %d слов, встречающихся по %d р.\n", topWords, len(buf), lastFrequency)
+// 		result += str
+// 		fmt.Print(str)
+// 	}
+// 	fPathResult, _ := a.saveResult(result)
+
+// 	a.createRequest()
+// 	a.createServer(fPathResult)
+// 	return nil
+// }
+
+// func (a *App) findWords(slice *[]string, entry fs.DirEntry) {
+// 	defer a.wg.Done()
+// 	fullFPath := filepath.Join(a.filesPath, entry.Name())
+// 	content, err := os.ReadFile(fullFPath)
+// 	if err != nil {
+// 		log.Println(err)
+// 		return
+// 	}
+// 	words := strings.FieldsFunc(string(content), func(r rune) bool {
+// 		return !unicode.IsLetter(r) && !unicode.IsNumber(r)
+// 	})
+// 	a.mu.Lock()
+// 	*slice = append(*slice, words...)
+// 	a.mu.Unlock()
+// }
+
+// func (a *App) saveResult(result string) (string, error) {
+// 	hash := sha1.New()
+// 	_, err := io.WriteString(hash, result)
+// 	if err != nil {
+// 		log.Println(err)
+// 		return "", err
+// 	}
+// 	hashName := fmt.Sprintf("%x", hash.Sum(nil))
+// 	log.Println(hashName)
+// 	fPath := filepath.Join(a.filesPath, hashName)
+// 	err = os.WriteFile(fPath, []byte(result), 0744)
+// 	if err != nil {
+// 		log.Println(err)
+// 		return "", err
+// 	}
+// 	return fPath, nil
+// }
+
+// func (a *App) createRequest() {
+// 	u := url.URL{
+// 		Scheme: a.scheme,
+// 		Path:   path.Join(a.basePath, a.method),
+// 		Host:   a.host,
+// 	}
+// 	log.Println(u.String())
+
+// 	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
+// 	if err != nil {
+// 		log.Fatal(err)
+// 	}
+
+// 	query := url.Values{}
+// 	query.Add("chat_id", "1234560")
+// 	query.Add("text", "Hello, Telegram!")
+// 	log.Println(query)
+
+// 	req.URL.RawQuery = query.Encode()
+
+// 	log.Println(req)
+// }
+
+// func (a *App) createServer(fPathResult string) {
+// 	handlerWords := func(w http.ResponseWriter, r *http.Request) { hanldeWords(w, r, fPathResult) }
+// 	handlerJSON := func(w http.ResponseWriter, r *http.Request) { handleJSON(w, r, fPathResult) }
+// 	http.HandleFunc(a.endpointWords, handlerWords)
+// 	http.HandleFunc(a.endpointJSON, handlerJSON)
+
+// 	log.Println("Начинаем слушать порт")
+// 	err := http.ListenAndServe(a.port, nil)
+// 	if err != nil {
+// 		log.Fatal(err)
+// 	}
+// }
+
+// func hanldeWords(w http.ResponseWriter, _ *http.Request, fPathResult string) {
+// 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+
+// 	result, err := readFile(fPathResult)
+// 	if err != nil {
+// 		log.Println(err)
+// 		w.WriteHeader(http.StatusInternalServerError)
+// 		return
+// 	}
+
+// 	w.WriteHeader(http.StatusOK)
+// 	w.Write([]byte(result))
+// }
+
+// func handleJSON(w http.ResponseWriter, _ *http.Request, fPathResult string) {
+// 	w.Header().Set("Content-Type", "application/json")
+
+// 	result, err := readFile(fPathResult)
+// 	if err != nil {
+// 		log.Println(err)
+// 		w.WriteHeader(http.StatusInternalServerError)
+// 		return
+// 	}
+
+// 	data := map[string]string{
+// 		"message": "Успех!",
+// 		"file":    fPathResult,
+// 		"content": result,
+// 	}
+
+// 	jsonData, err := json.Marshal(data)
+// 	if err != nil {
+// 		log.Println(err)
+// 		w.WriteHeader(http.StatusInternalServerError)
+// 		return
+// 	}
+// 	w.WriteHeader(http.StatusOK)
+// 	w.Write(jsonData)
+// }
+
+// func readFile(fPath string) (string, error) {
+// 	err := isExistFile(fPath)
+// 	if err != nil {
+// 		return "", err
+// 	}
+// 	log.Println("файл существует")
+// 	content, err := os.ReadFile(fPath)
+// 	if err != nil {
+// 		return "", err
+// 	}
+// 	return string(content), nil
+// }
+
+// func isExistFile(fPath string) error {
+// 	_, err := os.Stat(fPath)
+// 	if err != nil {
+// 		return fmt.Errorf("нет файла: %w", err)
+// 	}
+// 	return nil
+// }
