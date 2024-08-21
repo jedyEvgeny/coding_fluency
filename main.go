@@ -4,9 +4,10 @@
 // Запускаем с аргументом, примерно так: go run main.go ./short_files
 // Символ ./ используется в bash-языке как символ относительного пути к текущему каталогу
 
-// Лучшее время набора - 49 мин 07 сек, в т.ч. тесты, создание файлов и т.д. - но импорты вручную не прописываю.
+// Лучшее время набора - 40 мин, в т.ч. тесты, создание файлов и т.д. - но импорты вручную не прописываю.
 // ЗЫ - нужно заранее создать файлы с содержимым, а также go mod для тестов
 // ЗЗЫ - начинаю отсчёт времени с создания файлов .go, котороые создаю через консоль touch main.go 
+
 
 package main
 
@@ -29,12 +30,12 @@ import (
 type App struct {
 	wg            sync.WaitGroup
 	mu            sync.Mutex
-	baseFailsDir  string
-	needsTopWords int
+	filesPath     string
+	maxTopWord    int
 	host          string
-	method        string
-	basePath      string
 	scheme        string
+	basePath      string
+	method        string
 	endpointWords string
 	endpointJSON  string
 	port          string
@@ -46,13 +47,13 @@ type frequencyWord struct {
 }
 
 var (
-	filesDir      = "./files"
-	needsTopWords = 10
+	filesPath     = "./files"
+	maxTopWord    = 10
+	scheme        = "https"
 	host          = "api.telegram.org"
 	method        = "getUpdates"
-	scheme        = "https"
-	endpointWords = "/words"
 	endpointJSON  = "/json"
+	endpointWords = "/words"
 	port          = ":8080"
 )
 
@@ -66,31 +67,31 @@ func main() {
 
 func New() App {
 	return App{
-		baseFailsDir:  baseFailsDir(),
-		needsTopWords: needsTopWords,
+		filesPath:     findBasePath(),
+		maxTopWord:    maxTopWord,
+		scheme:        scheme,
 		host:          host,
 		method:        method,
 		basePath:      basePath(),
-		scheme:        scheme,
+		port:          port,
 		endpointWords: endpointWords,
 		endpointJSON:  endpointJSON,
-		port:          port,
 	}
 }
 
-func baseFailsDir() string {
+func findBasePath() string {
 	if len(os.Args) == 2 {
-		filesDir = os.Args[1]
+		filesPath = os.Args[1]
 	}
-	return filesDir
+	return filesPath
 }
 
 func basePath() string {
-	return path.Join("bot" + "1234567890")
+	return "bot" + "1234567890"
 }
 
 func (a *App) Run() error {
-	filesList, err := os.ReadDir(a.baseFailsDir)
+	filesList, err := os.ReadDir(a.filesPath)
 	if err != nil {
 		return err
 	}
@@ -100,7 +101,7 @@ func (a *App) Run() error {
 			continue
 		}
 		a.wg.Add(1)
-		go a.findAllWords(&allWords, fileEntry)
+		go a.findWords(&allWords, fileEntry)
 	}
 	a.wg.Wait()
 
@@ -121,9 +122,8 @@ func (a *App) Run() error {
 	var currentFrequency, lastFrequency, topWords int
 	buf := make([]string, 0, 10)
 	var result string
-
 	for _, el := range frequencyWords {
-		if topWords > a.needsTopWords {
+		if topWords > a.maxTopWord {
 			break
 		}
 		currentFrequency = el.frequency
@@ -139,20 +139,20 @@ func (a *App) Run() error {
 		}
 		buf = append(buf, el.word)
 	}
-	if len(buf) > 0 && topWords < a.needsTopWords+1 {
+	if len(buf) > 1 && topWords < a.maxTopWord+1 {
 		str := fmt.Sprintf("Топ №%d состоит из %d слов, встречающихся по %d р.\n", topWords, len(buf), lastFrequency)
 		result += str
 		fmt.Print(str)
 	}
 
 	a.createRequest()
-	a.startServer(result)
+	a.createServer(result)
 	return nil
 }
 
-func (a *App) findAllWords(slice *[]string, entry fs.DirEntry) {
+func (a *App) findWords(slice *[]string, entry fs.DirEntry) {
 	defer a.wg.Done()
-	fullFPath := filepath.Join(a.baseFailsDir, entry.Name())
+	fullFPath := filepath.Join(a.filesPath, entry.Name())
 	content, err := os.ReadFile(fullFPath)
 	if err != nil {
 		log.Println(err)
@@ -169,15 +169,15 @@ func (a *App) findAllWords(slice *[]string, entry fs.DirEntry) {
 func (a *App) createRequest() {
 	u := url.URL{
 		Scheme: a.scheme,
-		Path:   path.Join(a.method, a.basePath),
+		Path:   path.Join(a.basePath, a.method),
 		Host:   a.host,
 	}
 	log.Println(u.String())
+
 	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
 	if err != nil {
-		log.Println(err)
+		log.Fatal(err)
 	}
-	log.Println(req)
 
 	query := url.Values{}
 	query.Add("chat_id", "1234560")
@@ -185,42 +185,41 @@ func (a *App) createRequest() {
 	log.Println(query)
 
 	req.URL.RawQuery = query.Encode()
+
 	log.Println(req)
 }
 
-func (a *App) startServer(result string) {
-	handlerWords := func(w http.ResponseWriter, r *http.Request) { handlWords(w, r, result) }
+func (a *App) createServer(result string) {
+	handlerWords := func(w http.ResponseWriter, r *http.Request) { hanldeWords(w, r, result) }
 	handlerJSON := func(w http.ResponseWriter, r *http.Request) { handleJSON(w, r, result) }
 	http.HandleFunc(a.endpointWords, handlerWords)
 	http.HandleFunc(a.endpointJSON, handlerJSON)
 
-	log.Println("Начали слушать порт:")
+	log.Println("Начинаем слушать порт")
 	err := http.ListenAndServe(a.port, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
 }
 
-func handlWords(w http.ResponseWriter, _ *http.Request, result string) {
-	log.Println("Получен запрос")
+func hanldeWords(w http.ResponseWriter, _ *http.Request, result string) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprint(w, result)
+	w.Write([]byte(result))
 }
 
 func handleJSON(w http.ResponseWriter, _ *http.Request, result string) {
-	log.Println("Получен запрос")
 	w.Header().Set("Content-Type", "application/json")
-
 	data := map[string]string{
 		"message": "Успех!",
-		"result":  result,
+		"content": result,
 	}
 
 	jsonData, err := json.Marshal(data)
 	if err != nil {
-		log.Println("Не смогли преобразовать объект в json")
+		log.Println(err)
 		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 	w.WriteHeader(http.StatusOK)
 	w.Write(jsonData)
