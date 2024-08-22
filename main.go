@@ -272,3 +272,71 @@ func isExistFile(path string) error {
 	}
 	return nil
 }
+
+package main
+
+// import (
+// 	"encoding/json"
+// 	"fmt"
+// 	"log"
+// 	"net/http"
+// 	"net/url"
+// 	"path"
+// 	"strings"
+// )
+
+// func main() {
+// 	createRequest()
+// }
+
+// func createRequest() {
+// 	schema := "https"
+// 	host := "jsonplaceholder.typicode.com"
+// 	basePathURL := "/users"
+// 	method := "" // Пустая строка, так как параметры будут добавлены к базовому URL
+
+// 	u := url.URL{
+// 		Scheme: schema,
+// 		Host:   host,
+// 		Path:   path.Join(basePathURL, method),
+// 	}
+// 	log.Println("Параметры =", u.String())
+
+// 	query := url.Values{}
+// 	query.Add("_limit", "10") // Пример: ограничить до 5 пользователей
+
+// 	u.RawQuery = query.Encode()
+// 	log.Println("Полный URL с параметрами =", u.String())
+
+// 	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
+// 	if err != nil {
+// 		log.Fatal(err)
+// 	}
+
+// 	req.Header.Set("Content-Type", "application/json") // Установка заголовка Content-Type
+
+// 	client := &http.Client{}
+
+// 	resp, err := client.Do(req)
+// 	if err != nil {
+// 		log.Fatal(err)
+// 	}
+// 	defer resp.Body.Close()
+
+// 	var users []map[string]interface{}
+// 	err = json.NewDecoder(resp.Body).Decode(&users)
+// 	if err != nil {
+// 		log.Fatal(err)
+// 	}
+
+// 	log.Println(resp.Status)
+// 	fmt.Println("Полученные данные о пользователях:")
+// 	for _, user := range users {
+// 		fmt.Printf("ID: %v\n", user["id"])
+// 		fmt.Printf("Имя: %s\n", user["name"])
+// 		fmt.Printf("Email: %s\n", user["email"])
+// 		fmt.Printf("Website: %s\n", user["website"])
+// 		fmt.Printf("Phone: %s\n", user["phone"])
+// 		fmt.Println(strings.Repeat("-", 30))
+// 	}
+// }
