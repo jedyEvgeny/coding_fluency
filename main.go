@@ -30,17 +30,17 @@ import (
 )
 
 type App struct {
-	mu             sync.Mutex
-	wg             sync.WaitGroup
-	filesDir       string
-	maxTopWords    int
-	scheme         string
-	basePathClient string
-	method         string
-	host           string
-	portServer     string
-	endpointWords  string
-	endpointJSON   string
+	wg               sync.WaitGroup
+	mu               sync.Mutex
+	filesDir         string
+	maxTopWords      int
+	scheme           string
+	host             string
+	method           string
+	endpointClient   string
+	endpointServWord string
+	endpointServJson string
+	port             string
 }
 
 type frequencyWord struct {
@@ -48,16 +48,22 @@ type frequencyWord struct {
 	frequency int
 }
 
+type Response struct {
+	Message  string `json:"Сообщение"`
+	FileName string `json:"Имя файла"`
+	Content  string `json:"Содержимое"`
+}
+
 var (
-	filesDir       = "./files"
-	maxTopWords    = 10
-	scheme         = "https"
-	basePathClient = "/users"
-	hostClient     = "jsonplaceholder.typicode.com"
-	method         = ""
-	portServer     = ":8080"
-	endpointWords  = "/words"
-	endpointJSON   = "/json"
+	filesDir         = "./files"
+	maxTopWords      = 10
+	host             = "jsonplaceholder.typicode.com"
+	sheme            = "https"
+	method           = ""
+	endpointClient   = "users"
+	endpointServWord = "/words"
+	enpointServJson  = "/json"
+	port             = ":8080"
 )
 
 func main() {
@@ -70,19 +76,19 @@ func main() {
 
 func New() App {
 	return App{
-		filesDir:       findFilesDir(),
-		maxTopWords:    maxTopWords,
-		scheme:         scheme,
-		host:           hostClient,
-		basePathClient: basePathClient,
-		method:         method,
-		endpointWords:  endpointWords,
-		portServer:     portServer,
-		endpointJSON:   endpointJSON,
+		filesDir:         findDir(),
+		maxTopWords:      maxTopWords,
+		host:             host,
+		method:           method,
+		endpointClient:   endpointClient,
+		scheme:           sheme,
+		endpointServWord: endpointServWord,
+		endpointServJson: enpointServJson,
+		port:             port,
 	}
 }
 
-func findFilesDir() string {
+func findDir() string {
 	if len(os.Args) == 2 {
 		filesDir = os.Args[1]
 	}
@@ -95,6 +101,7 @@ func (a *App) Run() error {
 		return err
 	}
 	allWords := make([]string, 0, 10)
+
 	for _, fileEntry := range filesList {
 		if fileEntry.IsDir() {
 			continue
@@ -103,17 +110,14 @@ func (a *App) Run() error {
 		go a.findAllWords(&allWords, fileEntry)
 	}
 	a.wg.Wait()
-
 	uniqueWords := make(map[string]int)
 	for _, el := range allWords {
 		uniqueWords[el]++
 	}
-
 	frequencyWords := make([]frequencyWord, 0, 10)
 	for key, val := range uniqueWords {
 		frequencyWords = append(frequencyWords, frequencyWord{key, val})
 	}
-
 	sort.Slice(frequencyWords, func(i, j int) bool {
 		return frequencyWords[i].frequency > frequencyWords[j].frequency
 	})
@@ -144,10 +148,19 @@ func (a *App) Run() error {
 		result += s
 		fmt.Print(s)
 	}
+	path, err := a.saveResult(result)
+	if err != nil {
+		return err
+	}
 
-	a.createRequest()
-	fPath := a.saveResult(result)
-	a.createServer(fPath)
+	err = a.createRequest()
+	if err != nil {
+		return err
+	}
+	err = a.createServer(path)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -165,140 +178,137 @@ func (a *App) findAllWords(slice *[]string, entry fs.DirEntry) {
 	a.mu.Lock()
 	*slice = append(*slice, words...)
 	a.mu.Unlock()
-
 }
 
-func (a *App) createRequest() {
-	u := url.URL{
-		Scheme: a.scheme,
-		Host:   a.host,
-		Path:   path.Join(a.basePathClient, a.method),
-	}
-	log.Println("URL:", u.String())
-
-	query := url.Values{}
-	query.Add("_limit", "3")
-
-	u.RawQuery = query.Encode()
-	log.Println("URL c параметрами:", u.String())
-
-	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
-	if err != nil {
-		log.Println(err)
-		return
-	}
-
-	client := &http.Client{}
-
-	n := time.Now()
-	resp, err := client.Do(req)
-	e := time.Now()
-	log.Println("Запрос ответа длительностью:", e.Sub(n))
-	log.Println(resp.Status)
-
-	if err != nil {
-		log.Println(err)
-		return
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	var users []map[string]interface{}
-	err = json.NewDecoder(resp.Body).Decode(&users)
-	if err != nil {
-		log.Println(err)
-		return
-	}
-
-	for _, el := range users {
-		s := fmt.Sprintf("Имя: %v\nТелефон: %v\n, e-mail: %v\n", el["name"], el["phone"], el["email"])
-		fmt.Print(s)
-		fmt.Println(strings.Repeat("-", 25))
-	}
-
-}
-
-func (a *App) saveResult(result string) string {
+func (a *App) saveResult(result string) (string, error) {
 	h := sha1.New()
 	_, err := io.WriteString(h, result)
 	if err != nil {
-		log.Fatal(err)
+		return "", err
 	}
 	hash := fmt.Sprintf("%x", h.Sum(nil))
 
 	fPath := filepath.Join(a.filesDir, hash)
 	err = os.WriteFile(fPath, []byte(result), 0744)
 	if err != nil {
-		log.Fatal(err)
+		return "", err
 	}
-	return fPath
+	return fPath, nil
 }
 
-func (a *App) createServer(path string) {
-	handlerWords := func(w http.ResponseWriter, r *http.Request) { handleWords(w, r, path) }
-	handlerJSON := func(w http.ResponseWriter, r *http.Request) { handleJSON(w, r, path) }
-	http.HandleFunc(a.endpointWords, handlerWords)
-	http.HandleFunc(a.endpointJSON, handlerJSON)
-
-	err := http.ListenAndServe(a.portServer, nil)
-	if err != nil {
-		log.Fatal(err)
+func (a *App) createRequest() error {
+	u := url.URL{
+		Scheme: a.scheme,
+		Path:   path.Join(a.endpointClient, a.method),
+		Host:   host,
 	}
+
+	query := url.Values{}
+	query.Add("_limit", "3")
+
+	u.RawQuery = query.Encode()
+
+	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
+	if err != nil {
+		return err
+	}
+	log.Println(req)
+
+	client := &http.Client{}
+
+	start := time.Now()
+	resp, err := client.Do(req)
+	end := time.Now()
+	log.Println("Длительность ответа:", end.Sub(start))
+	log.Println(resp.StatusCode)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var users []map[string]interface{}
+	err = json.NewDecoder(resp.Body).Decode(&users)
+	if err != nil {
+		return err
+	}
+
+	for _, el := range users {
+		str := fmt.Sprintf("Имя: %v\nТелефон: %v\ne-mail: %v\n", el["name"], el["phone"], el["email"])
+		fmt.Print(str)
+		fmt.Println(strings.Repeat("-", 25))
+	}
+	return nil
+}
+
+func (a *App) createServer(path string) error {
+	handlerWord := func(w http.ResponseWriter, r *http.Request) { handleWords(w, r, path) }
+	handlerJson := func(w http.ResponseWriter, r *http.Request) { handleJson(w, r, path) }
+	http.HandleFunc(a.endpointServWord, handlerWord)
+	http.HandleFunc(a.endpointServJson, handlerJson)
+
+	log.Println("Слушаем порт")
+	err := http.ListenAndServe(a.port, nil)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func handleWords(w http.ResponseWriter, _ *http.Request, path string) {
-	w.Header().Set("Content-Type", "text/plain;charset=utf-8")
-	result, err := readFile(path)
+	log.Println("Получен запрос")
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	content, err := readContent(path)
 	if err != nil {
+		log.Println(err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
-	w.Write(result)
+	w.Write(content)
 }
 
-func handleJSON(w http.ResponseWriter, _ *http.Request, path string) {
-	w.Header().Set("Content-type", "application/json")
-	result, err := readFile(path)
+func handleJson(w http.ResponseWriter, _ *http.Request, path string) {
+	log.Println("Получен запрос")
+	w.Header().Set("Content-Type", "application/json")
+	content, err := readContent(path)
 	if err != nil {
+		log.Println(err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-
-	data := map[string]string{
-		"Message":    "Успех",
-		"Имя файла":  path,
-		"Содержимое": string(result),
+	response := Response{
+		Message:  "Успех",
+		FileName: path,
+		Content:  string(content),
 	}
 
-	jsonData, err := json.Marshal(data)
+	jsonData, err := json.Marshal(response)
 	if err != nil {
+		log.Println(err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
 	w.Write(jsonData)
-
 }
 
-func readFile(path string) ([]byte, error) {
+func readContent(path string) ([]byte, error) {
 	err := isExistFile(path)
 	if err != nil {
 		return nil, err
 	}
-	result, err := os.ReadFile(path)
+	content, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	return result, nil
+	return content, nil
 }
 
 func isExistFile(path string) error {
 	_, err := os.Stat(path)
 	if err != nil {
-		log.Println("Файл не существует", err)
 		return err
 	}
 	return nil
-
 }
 
