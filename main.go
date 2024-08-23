@@ -25,21 +25,22 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 	"unicode"
 )
 
 type App struct {
-	wg            sync.WaitGroup
-	mu            sync.Mutex
-	filesPath     string
-	maxTopWords   int
-	host          string
-	method        string
-	basePathURL   string
-	schema        string
-	port          string
-	endpointWords string
-	endpointJSON  string
+	mu             sync.Mutex
+	wg             sync.WaitGroup
+	filesDir       string
+	maxTopWords    int
+	scheme         string
+	basePathClient string
+	method         string
+	host           string
+	portServer     string
+	endpointWords  string
+	endpointJSON   string
 }
 
 type frequencyWord struct {
@@ -48,14 +49,15 @@ type frequencyWord struct {
 }
 
 var (
-	filesPath     = "./files"
-	maxTopWords   = 10
-	schema        = "https"
-	method        = "getUpdates"
-	host          = "api.telegram.org"
-	port          = ":8080"
-	endpointWords = "/words"
-	endpointJSON  = "/json"
+	filesDir       = "./files"
+	maxTopWords    = 10
+	scheme         = "https"
+	basePathClient = "/users"
+	hostClient     = "jsonplaceholder.typicode.com"
+	method         = ""
+	portServer     = ":8080"
+	endpointWords  = "/words"
+	endpointJSON   = "/json"
 )
 
 func main() {
@@ -68,36 +70,31 @@ func main() {
 
 func New() App {
 	return App{
-		filesPath:     findFilesPath(),
-		maxTopWords:   maxTopWords,
-		schema:        schema,
-		host:          host,
-		basePathURL:   basePath(),
-		method:        method,
-		port:          port,
-		endpointWords: endpointWords,
-		endpointJSON:  endpointJSON,
+		filesDir:       findFilesDir(),
+		maxTopWords:    maxTopWords,
+		scheme:         scheme,
+		host:           hostClient,
+		basePathClient: basePathClient,
+		method:         method,
+		endpointWords:  endpointWords,
+		portServer:     portServer,
+		endpointJSON:   endpointJSON,
 	}
 }
 
-func findFilesPath() string {
-	if len(os.Args) > 1 {
-		filesPath = os.Args[1]
+func findFilesDir() string {
+	if len(os.Args) == 2 {
+		filesDir = os.Args[1]
 	}
-	return filesPath
-}
-
-func basePath() string {
-	return "bot" + "1234567890"
+	return filesDir
 }
 
 func (a *App) Run() error {
-	filesList, err := os.ReadDir(a.filesPath)
+	filesList, err := os.ReadDir(a.filesDir)
 	if err != nil {
 		return err
 	}
 	allWords := make([]string, 0, 10)
-
 	for _, fileEntry := range filesList {
 		if fileEntry.IsDir() {
 			continue
@@ -121,40 +118,42 @@ func (a *App) Run() error {
 		return frequencyWords[i].frequency > frequencyWords[j].frequency
 	})
 
-	var currentFrequency, lastFrequency, topWords int
+	var currFrequency, lastFrequency, topWords int
 	buf := make([]string, 0, 10)
 	var result string
+
 	for _, el := range frequencyWords {
 		if topWords > a.maxTopWords {
 			break
 		}
-		currentFrequency = el.frequency
-		if currentFrequency != lastFrequency && len(buf) > 0 {
+		currFrequency = el.frequency
+		if currFrequency != lastFrequency && len(buf) > 0 {
 			s := fmt.Sprintf("Топ №%d состоит из %d слов, встречающихся по %d р.: %s\n", topWords, len(buf), lastFrequency, buf)
-			fmt.Print(s)
 			result += s
+			fmt.Print(s)
 			buf = nil
 		}
-		if currentFrequency != lastFrequency {
-			lastFrequency = currentFrequency
+		if currFrequency != lastFrequency {
+			lastFrequency = currFrequency
 			topWords++
 		}
 		buf = append(buf, el.word)
 	}
 	if len(buf) > 0 && topWords < a.maxTopWords+1 {
 		s := fmt.Sprintf("Топ №%d состоит из %d слов, встречающихся по %d р.\n", topWords, len(buf), lastFrequency)
-		fmt.Print(s)
 		result += s
+		fmt.Print(s)
 	}
-	fPath, _ := a.saveResult(result)
+
 	a.createRequest()
+	fPath := a.saveResult(result)
 	a.createServer(fPath)
 	return nil
 }
 
 func (a *App) findAllWords(slice *[]string, entry fs.DirEntry) {
 	defer a.wg.Done()
-	fullFPath := filepath.Join(a.filesPath, entry.Name())
+	fullFPath := filepath.Join(a.filesDir, entry.Name())
 	content, err := os.ReadFile(fullFPath)
 	if err != nil {
 		log.Println(err)
@@ -166,177 +165,140 @@ func (a *App) findAllWords(slice *[]string, entry fs.DirEntry) {
 	a.mu.Lock()
 	*slice = append(*slice, words...)
 	a.mu.Unlock()
+
 }
 
 func (a *App) createRequest() {
 	u := url.URL{
-		Scheme: a.schema,
+		Scheme: a.scheme,
 		Host:   a.host,
-		Path:   path.Join(a.basePathURL, a.method),
+		Path:   path.Join(a.basePathClient, a.method),
 	}
-	log.Println("Параметры = ", u.String())
-	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
-	if err != nil {
-		log.Fatal(err)
-	}
-	log.Println("Запрос =", req)
+	log.Println("URL:", u.String())
 
 	query := url.Values{}
-	query.Add("chat_id", "1234567")
-	query.Add("text", "Hello, Telegram!")
-	log.Println("параметры запроса =", query)
+	query.Add("_limit", "3")
 
-	req.URL.RawQuery = query.Encode()
-	log.Println("Полныйй запрос =", req)
+	u.RawQuery = query.Encode()
+	log.Println("URL c параметрами:", u.String())
+
+	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	client := &http.Client{}
+
+	n := time.Now()
+	resp, err := client.Do(req)
+	e := time.Now()
+	log.Println("Запрос ответа длительностью:", e.Sub(n))
+	log.Println(resp.Status)
+
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var users []map[string]interface{}
+	err = json.NewDecoder(resp.Body).Decode(&users)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	for _, el := range users {
+		s := fmt.Sprintf("Имя: %v\nТелефон: %v\n, e-mail: %v\n", el["name"], el["phone"], el["email"])
+		fmt.Print(s)
+		fmt.Println(strings.Repeat("-", 25))
+	}
+
 }
 
-func (a *App) saveResult(result string) (string, error) {
+func (a *App) saveResult(result string) string {
 	h := sha1.New()
 	_, err := io.WriteString(h, result)
 	if err != nil {
-		return "", err
+		log.Fatal(err)
 	}
 	hash := fmt.Sprintf("%x", h.Sum(nil))
 
-	fPath := filepath.Join(a.filesPath, hash)
+	fPath := filepath.Join(a.filesDir, hash)
 	err = os.WriteFile(fPath, []byte(result), 0744)
 	if err != nil {
-		return "", err
+		log.Fatal(err)
 	}
-	return fPath, err
+	return fPath
 }
 
-func (a *App) createServer(fPath string) {
-	handlerWords := func(w http.ResponseWriter, r *http.Request) { handleWords(w, r, fPath) }
-	handlerJSON := func(w http.ResponseWriter, r *http.Request) { handleJSON(w, r, fPath) }
+func (a *App) createServer(path string) {
+	handlerWords := func(w http.ResponseWriter, r *http.Request) { handleWords(w, r, path) }
+	handlerJSON := func(w http.ResponseWriter, r *http.Request) { handleJSON(w, r, path) }
 	http.HandleFunc(a.endpointWords, handlerWords)
 	http.HandleFunc(a.endpointJSON, handlerJSON)
 
-	log.Println("Начали слушать порт")
-	err := http.ListenAndServe(a.port, nil)
+	err := http.ListenAndServe(a.portServer, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
 }
 
-func handleWords(w http.ResponseWriter, _ *http.Request, fPath string) {
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	content, err := rFile(fPath)
+func handleWords(w http.ResponseWriter, _ *http.Request, path string) {
+	w.Header().Set("Content-Type", "text/plain;charset=utf-8")
+	result, err := readFile(path)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
-	w.Write(content)
+	w.Write(result)
 }
 
-func handleJSON(w http.ResponseWriter, _ *http.Request, fPath string) {
-	w.Header().Set("Content-Type", "application/json")
-	content, err := rFile(fPath)
+func handleJSON(w http.ResponseWriter, _ *http.Request, path string) {
+	w.Header().Set("Content-type", "application/json")
+	result, err := readFile(path)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+
 	data := map[string]string{
-		"msg":      "Успех!",
-		"fileName": fPath,
-		"content":  string(content),
+		"Message":    "Успех",
+		"Имя файла":  path,
+		"Содержимое": string(result),
 	}
-	dataJSON, err := json.Marshal(data)
+
+	jsonData, err := json.Marshal(data)
 	if err != nil {
-		log.Println(err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
-	w.Write(dataJSON)
+	w.Write(jsonData)
+
 }
 
-func rFile(path string) ([]byte, error) {
+func readFile(path string) ([]byte, error) {
 	err := isExistFile(path)
 	if err != nil {
-		log.Println("Не смогли открыть файл", err)
-		return []byte{}, err
+		return nil, err
 	}
-	content, err := os.ReadFile(path)
+	result, err := os.ReadFile(path)
 	if err != nil {
-		return []byte{}, err
+		return nil, err
 	}
-	return content, nil
+	return result, nil
 }
 
 func isExistFile(path string) error {
 	_, err := os.Stat(path)
 	if err != nil {
+		log.Println("Файл не существует", err)
 		return err
 	}
 	return nil
+
 }
 
-package main
-
-// import (
-// 	"encoding/json"
-// 	"fmt"
-// 	"log"
-// 	"net/http"
-// 	"net/url"
-// 	"path"
-// 	"strings"
-// )
-
-// func main() {
-// 	createRequest()
-// }
-
-// func createRequest() {
-// 	schema := "https"
-// 	host := "jsonplaceholder.typicode.com"
-// 	basePathURL := "/users"
-// 	method := "" // Пустая строка, так как параметры будут добавлены к базовому URL
-
-// 	u := url.URL{
-// 		Scheme: schema,
-// 		Host:   host,
-// 		Path:   path.Join(basePathURL, method),
-// 	}
-// 	log.Println("Параметры =", u.String())
-
-// 	query := url.Values{}
-// 	query.Add("_limit", "10") // Пример: ограничить до 5 пользователей
-
-// 	u.RawQuery = query.Encode()
-// 	log.Println("Полный URL с параметрами =", u.String())
-
-// 	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
-
-// 	req.Header.Set("Content-Type", "application/json") // Установка заголовка Content-Type
-
-// 	client := &http.Client{}
-
-// 	resp, err := client.Do(req)
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
-// 	defer resp.Body.Close()
-
-// 	var users []map[string]interface{}
-// 	err = json.NewDecoder(resp.Body).Decode(&users)
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
-
-// 	log.Println(resp.Status)
-// 	fmt.Println("Полученные данные о пользователях:")
-// 	for _, user := range users {
-// 		fmt.Printf("ID: %v\n", user["id"])
-// 		fmt.Printf("Имя: %s\n", user["name"])
-// 		fmt.Printf("Email: %s\n", user["email"])
-// 		fmt.Printf("Website: %s\n", user["website"])
-// 		fmt.Printf("Phone: %s\n", user["phone"])
-// 		fmt.Println(strings.Repeat("-", 30))
-// 	}
-// }
