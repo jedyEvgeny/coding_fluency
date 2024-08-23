@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -9,37 +10,40 @@ import (
 )
 
 func TestFindAllWords(t *testing.T) {
-	testDir := t.TempDir()
-	a := &App{FilesDir: testDir}
+	tempDir := t.TempDir()
 	content := []string{
 		"БИМ бом",
-		"дин Дон",
-		"кин, !кон",
+		"диН Дон",
+		"кин, ?кон",
 		"",
 		" ",
-		"1 /22 333?",
+		"	",
+		"1 !22 -333",
+		"apple /banana",
 	}
-	expectedSlice := []string{"БИМ", "бом", "дин", "Дон", "кин", "кон", "1", "22", "333"}
-
+	expectedSlice := []string{"БИМ", "бом", "диН", "Дон", "кин", "кон", "1", "22", "333", "apple", "banana"}
 	for idx, el := range content {
 		fName := fmt.Sprintf("%d.txt", idx)
-		fPath := filepath.Join(testDir, fName)
+		fPath := filepath.Join(tempDir, fName)
 		err := os.WriteFile(fPath, []byte(el), 0744)
 		if err != nil {
-			t.Fatal(err)
+			log.Fatal(err)
 		}
 	}
-	filesList, err := os.ReadDir(testDir)
+	var allWords []string
+	a := App{
+		filesDir: tempDir,
+	}
+	filesList, err := os.ReadDir(tempDir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	allSliceWords := make([]string, 0, 9)
 	for _, entry := range filesList {
 		a.wg.Add(1)
-		a.findAllWords(&allSliceWords, entry)
+		a.findAllWords(&allWords, entry)
 	}
 	a.wg.Wait()
-	if !reflect.DeepEqual(expectedSlice, allSliceWords) {
-		t.Errorf("Ожидалось %s, получили %s", expectedSlice, allSliceWords)
+	if !reflect.DeepEqual(expectedSlice, allWords) {
+		t.Errorf("Ожидалось: \n%s,\n получили \n%s\n", expectedSlice, allWords)
 	}
 }
