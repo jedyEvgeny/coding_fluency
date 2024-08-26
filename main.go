@@ -10,6 +10,7 @@
 package main
 
 import (
+	"bufio"
 	"crypto/sha1"
 	"encoding/json"
 	"fmt"
@@ -67,11 +68,35 @@ var (
 )
 
 func main() {
+	initRequest()
 	a := New()
 	err := a.Run()
 	if err != nil {
 		log.Fatal(err)
 	}
+}
+
+func initRequest() {
+	scanner := bufio.NewScanner(os.Stdin)
+	for {
+		fmt.Print("Введите фразу c $ для старта сервиса: ")
+		if !scanner.Scan() {
+			fmt.Println("Ошибка ввода:", scanner.Err())
+			return
+		}
+		phrase := scanner.Text()
+		ok := findKey(phrase)
+		if ok {
+			return
+		}
+	}
+}
+
+func findKey(s string) bool {
+	desiredChar := '$'
+	position := strings.IndexRune(s, desiredChar)
+	log.Printf("Символ '%c' найден в позиции %d\n", desiredChar, position)
+	return position > -1
 }
 
 func New() App {
@@ -222,6 +247,7 @@ func (a *App) createRequest() error {
 
 func (a *App) saveResult(result string) (string, error) {
 	h := sha1.New()
+	h.Write([]byte(result))
 	_, err := io.WriteString(h, result)
 	if err != nil {
 		return "", err
@@ -285,7 +311,6 @@ func handleJson(w http.ResponseWriter, path string) {
 	}
 	w.WriteHeader(http.StatusOK)
 	w.Write(dataJson)
-
 }
 
 func readFile(path string) ([]byte, error) {
