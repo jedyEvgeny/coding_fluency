@@ -4,7 +4,7 @@
 // Запускаем с аргументом, примерно так: go run main.go ./short_files
 // Символ ./ используется в bash-языке как символ относительного пути к текущему каталогу
 
-// Лучшее время набора обоих файлов = 52 мин
+// Лучшее время набора обоих файлов = 54 мин
 // ЗЫ - нужно заранее создать файлы с содержимым, а также go mod для тестов
 // ЗЗЫ - начинаю отсчёт времени с удаления предыдущих файлов .go, котороые следом создаю через консоль touch main.go 
 package main
@@ -30,28 +30,28 @@ import (
 )
 
 type App struct {
-	filesDir            string
 	wg                  sync.WaitGroup
 	mu                  sync.Mutex
+	filesDir            string
 	maxTopWords         int
 	endpointClient      string
 	hostClient          string
 	methodClient        string
-	scheme              string
+	schemeClient        string
+	portServer          string
 	endpointServerWords string
 	endpointServerJson  string
-	portServer          string
 }
 
-type frequencyWord struct {
+type freqeuncyWord struct {
 	word      string
 	frequency int
 }
 
 type Response struct {
-	Message  string `json:"Сообщение"`
-	FileName string `json:"Имя файла"`
-	Result   string `json:"Содержимое файла"`
+	Message string `json:"Сообщение"`
+	Path    string `json:"Имя файла"`
+	Result  string `json:"Содержимое файла"`
 }
 
 const perm = 0744
@@ -59,30 +59,30 @@ const perm = 0744
 var (
 	filesDir            = "./files"
 	maxTopWords         = 10
-	endpointClient      = "users"
-	methodClient        = ""
+	endpointClient      = "/users"
 	hostClient          = "jsonplaceholder.typicode.com"
-	scheme              = "https"
+	schemeClient        = "https"
+	methodClient        = ""
+	portServer          = ":8080"
 	endpointServerWords = "/words"
 	endpointServerJson  = "/json"
-	portServer          = ":8080"
 )
 
 func main() {
-	initInstruction()
-	a := new()
+	initConfig()
+	a := New()
 	err := a.Run()
 	if err != nil {
 		log.Fatal(err)
 	}
 }
 
-func initInstruction() {
+func initConfig() {
 	scanner := bufio.NewScanner(os.Stdin)
 	for {
-		fmt.Println("Введите строку со знаком $ для старта сервиса:")
+		fmt.Println("Введите фразу с $ для старта сервиса:")
 		if !scanner.Scan() {
-			log.Println("Не удалось считать данные:", scanner.Err())
+			log.Println("Не смогли считать данные:", scanner.Err())
 		}
 		phrase := scanner.Text()
 		ok := findKey(phrase)
@@ -90,29 +90,31 @@ func initInstruction() {
 			break
 		}
 	}
+	log.Println("Сервис запущен")
 }
 
 func findKey(phrase string) bool {
 	destChar := '$'
-	idx := strings.IndexRune(phrase, destChar)
-	return idx > -1
+	idxChar := strings.IndexRune(phrase, destChar)
+	log.Println("Позиция:", idxChar)
+	return idxChar > -1
 }
 
-func new() App {
+func New() App {
 	return App{
-		filesDir:            findFilesDir(),
+		filesDir:            findDir(),
 		maxTopWords:         maxTopWords,
-		hostClient:          hostClient,
 		endpointClient:      endpointClient,
+		hostClient:          hostClient,
 		methodClient:        methodClient,
-		scheme:              scheme,
+		schemeClient:        schemeClient,
+		portServer:          portServer,
 		endpointServerWords: endpointServerWords,
 		endpointServerJson:  endpointServerJson,
-		portServer:          portServer,
 	}
 }
 
-func findFilesDir() string {
+func findDir() string {
 	if len(os.Args) == 2 {
 		filesDir = os.Args[1]
 	}
@@ -137,9 +139,9 @@ func (a *App) Run() error {
 	for _, el := range allWords {
 		uniqueWords[el]++
 	}
-	frequencyWords := make([]frequencyWord, 0, 10)
+	frequencyWords := make([]freqeuncyWord, 0, 10)
 	for key, val := range uniqueWords {
-		frequencyWords = append(frequencyWords, frequencyWord{key, val})
+		frequencyWords = append(frequencyWords, freqeuncyWord{key, val})
 	}
 	sort.Slice(frequencyWords, func(i, j int) bool {
 		return frequencyWords[i].frequency > frequencyWords[j].frequency
@@ -147,6 +149,7 @@ func (a *App) Run() error {
 	var currFrequency, lastFrequency, topWords int
 	var buf []string
 	results := make([]string, 0, a.maxTopWords)
+
 	for _, el := range frequencyWords {
 		if topWords > a.maxTopWords {
 			break
@@ -154,8 +157,8 @@ func (a *App) Run() error {
 		currFrequency = el.frequency
 		if currFrequency != lastFrequency && len(buf) > 0 {
 			s := fmt.Sprintf("Топ №%d состоит из %d слов, встречающихся по %d р.: %s\n", topWords, len(buf), lastFrequency, buf)
-			results = append(results, s)
 			fmt.Print(s)
+			results = append(results, s)
 			buf = nil
 		}
 		if currFrequency != lastFrequency {
@@ -166,24 +169,22 @@ func (a *App) Run() error {
 	}
 	if len(buf) > 0 && topWords < a.maxTopWords+1 {
 		s := fmt.Sprintf("Топ №%d состоит из %d слов, встречающихся по %d р.\n", topWords, len(buf), lastFrequency)
-		results = append(results, s)
 		fmt.Print(s)
+		results = append(results, s)
 	}
 	result := strings.Join(results, "")
-	fPathRes, err := a.saveResult(result)
+	pathFileResult, err := a.saveResult(result)
 	if err != nil {
 		return err
 	}
-	_ = fPathRes
 	err = a.createRequest()
 	if err != nil {
 		return err
 	}
-	err = a.createServer(fPathRes)
+	err = a.createServer(pathFileResult)
 	if err != nil {
 		return err
 	}
-
 	return nil
 }
 
@@ -196,7 +197,7 @@ func (a *App) findWords(slice *[]string, entry fs.DirEntry) {
 		return
 	}
 	words := strings.FieldsFunc(string(content), func(r rune) bool {
-		return !unicode.IsNumber(r) && !unicode.IsLetter(r)
+		return !unicode.IsLetter(r) && !unicode.IsNumber(r)
 	})
 	a.mu.Lock()
 	*slice = append(*slice, words...)
@@ -207,26 +208,27 @@ func (a *App) saveResult(result string) (string, error) {
 	h := sha1.New()
 	_, err := io.WriteString(h, result)
 	if err != nil {
-		return "", err
+		return "", nil
 	}
 	hash := fmt.Sprintf("%x", h.Sum(nil))
 	fPath := filepath.Join(a.filesDir, hash)
 	err = os.WriteFile(fPath, []byte(result), perm)
 	if err != nil {
-		return "", err
+		return "", nil
 	}
 	return fPath, nil
 }
 
 func (a *App) createRequest() error {
 	u := url.URL{
-		Scheme: a.scheme,
-		Path:   path.Join(a.endpointClient, a.methodClient),
+		Scheme: a.schemeClient,
 		Host:   a.hostClient,
+		Path:   path.Join(a.endpointClient, a.methodClient),
 	}
 
 	query := url.Values{}
 	query.Add("_limit", "3")
+
 	u.RawQuery = query.Encode()
 	log.Println(u.String())
 
@@ -243,25 +245,27 @@ func (a *App) createRequest() error {
 	if err != nil {
 		return err
 	}
+	defer func() { _ = resp.Body.Close() }()
 	log.Println(resp.Status, end.Sub(start))
 
 	var data []map[string]interface{}
+
 	err = json.NewDecoder(resp.Body).Decode(&data)
 	if err != nil {
 		return err
 	}
-	for _, el := range data {
-		s := fmt.Sprintf("Имя: %v; телефон: %v; почта: %v\n", el["name"], el["phone"], el["email"])
-		fmt.Print(s)
-		fmt.Println(strings.Repeat("-", 30))
-	}
 
+	for _, user := range data {
+		s := fmt.Sprintf("Имя: %v; телефон: %v, почта: %v\n", user["name"], user["phone"], user["email"])
+		fmt.Print(s)
+		fmt.Println(strings.Repeat("-", 25))
+	}
 	return nil
 }
 
 func (a *App) createServer(path string) error {
-	handlerWords := func(w http.ResponseWriter, r *http.Request) { handleWords(w, path) }
-	handlerJson := func(w http.ResponseWriter, r *http.Request) { handleJson(w, path) }
+	handlerWords := func(w http.ResponseWriter, r *http.Request) { handleWords(w, r, path) }
+	handlerJson := func(w http.ResponseWriter, r *http.Request) { handleJson(w, r, path) }
 
 	http.HandleFunc(a.endpointServerWords, handlerWords)
 	http.HandleFunc(a.endpointServerJson, handlerJson)
@@ -274,31 +278,7 @@ func (a *App) createServer(path string) error {
 	return nil
 }
 
-func handleJson(w http.ResponseWriter, path string) {
-	w.Header().Set("Content-Type", "application/json")
-	content, err := readFile(path)
-	if err != nil {
-		log.Println(err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	response := Response{
-		Message:  "Успех",
-		FileName: path,
-		Result:   string(content),
-	}
-
-	responseJson, err := json.Marshal(response)
-	if err != nil {
-		log.Println(err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	w.WriteHeader(http.StatusOK)
-	w.Write(responseJson)
-}
-
-func handleWords(w http.ResponseWriter, path string) {
+func handleWords(w http.ResponseWriter, r *http.Request, path string) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	content, err := readFile(path)
 	if err != nil {
@@ -307,7 +287,35 @@ func handleWords(w http.ResponseWriter, path string) {
 		return
 	}
 	w.WriteHeader(http.StatusOK)
+	method := r.Method
+	log.Println("Получен запрос с методом:", method)
 	w.Write(content)
+}
+
+func handleJson(w http.ResponseWriter, r *http.Request, path string) {
+	w.Header().Set("Content-Type", "application/json")
+	content, err := readFile(path)
+	if err != nil {
+		log.Println(err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	data := Response{
+		Message: r.Proto,
+		Path:    path,
+		Result:  string(content),
+	}
+
+	dataJson, err := json.Marshal(data)
+	if err != nil {
+		log.Println(err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write(dataJson)
 }
 
 func readFile(path string) ([]byte, error) {
