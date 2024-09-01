@@ -13,12 +13,12 @@ func TestFindWords(t *testing.T) {
 	content := []string{
 		"БИМ бом",
 		"Дин доН",
-		",кин ?кон",
-		"apple()banana",
+		"кин, кон?",
+		"apple+banana",
 		"",
 		" ",
 		"	",
-		"1 /22 _333",
+		"1 -22 ;333",
 	}
 	expectedWords := []string{"БИМ", "бом", "Дин", "доН", "кин", "кон", "apple", "banana", "1", "22", "333"}
 	for idx, el := range content {
@@ -38,11 +38,10 @@ func TestFindWords(t *testing.T) {
 		filesDir: tempDir,
 	}
 	for _, entry := range filesList {
-		a.wg.Add(1)
-		a.findWords(&allWords, entry)
+		allWords = a.findWords(allWords, entry)
 	}
-	a.wg.Wait()
 	if !reflect.DeepEqual(expectedWords, allWords) {
-		t.Errorf("Ожидалось \n%s,\nПолучили \n%s\n", expectedWords, allWords)
+		t.Errorf("Ожидалось \n%s,\nполучили \n%s\n", expectedWords, allWords)
 	}
+
 }
