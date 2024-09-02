@@ -46,3 +46,28 @@ func TestFindWords(t *testing.T) {
 		t.Errorf("Ожидалось \n%s,\nПолучили \n%s\n", expectedSlice, allWords)
 	}
 }
+
+//	Запуск: go test -bench=. -v	
+//	func BenchmarkFindWords(b *testing.B) {
+// 	dir := "./files"
+
+// 	var allWords []string
+// 	filesList, err := os.ReadDir(dir)
+// 	if err != nil {
+// 		b.Fatal(err)
+// 	}
+
+// 	a := App{
+// 		filesDir: dir,
+// 	}
+
+// 	// Запускаем бенчмарк
+// 	for i := 0; i < b.N; i++ {
+// 		allWords = allWords[:0] // Сбрасываем slice
+// 		for _, entry := range filesList {
+// 			a.wg.Add(1)
+// 			allWords = a.findWords(allWords, entry)
+// 		}
+// 		a.wg.Wait()
+// 	}
+// }
