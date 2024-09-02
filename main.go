@@ -359,3 +359,7 @@ func handleTime(w http.ResponseWriter, r *http.Request) {
 	log.Println("Получен запрос с мэйджорпрото:", r.ProtoMajor)
 	w.Write([]byte(now))
 }
+//	func handlerImage(w http.ResponseWriter, r *http.Request) {
+// 	w.Header().Set("Content-Type", "image/png")
+// 	http.ServeFile(w, r, "./images/Ветер Северный.png")
+// }
