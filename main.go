@@ -3,7 +3,7 @@
 // Основа кода - поиск наиболее часто встречающихся слов среди нескольких заранее подготовленных текстов
 // Запускаем с аргументом, примерно так: go run main.go -name Алиса ./short_files
 
-// Лучшее время набора обоих файлов = 58 мин.
+// Лучшее время набора обоих файлов = 55 мин.
 // ЗЫ - нужно заранее создать файлы с текстом, а также go mod для тестов
 // ЗЗЫ - начинаю отсчёт времени с удаления предыдущих файлов .go, котороые следом создаю через консоль touch main.go 
 package main
@@ -29,17 +29,17 @@ import (
 )
 
 type App struct {
-	filesDir            string
 	wg                  sync.WaitGroup
 	mu                  sync.Mutex
+	filesDir            string
 	maxTopWords         int
+	methodClient        string
 	hostClient          string
 	endpointClient      string
-	methodClient        string
 	schemeClient        string
 	portServer          string
-	endpointServerWords string
 	endpointServerJson  string
+	endpointServerWords string
 }
 
 type frequencyWord struct {
@@ -48,9 +48,9 @@ type frequencyWord struct {
 }
 
 type Response struct {
-	Proto    string `json:"Протокол запроса клиента"`
-	FileName string `json:"Имя файла"`
-	Result   string `json:"Содержимое файла"`
+	Proto  string `json:"Протокол клинета"`
+	Path   string `json:"Имя файла"`
+	Result string `json:"Содержимое файла"`
 }
 
 const perm = 0744
@@ -59,13 +59,35 @@ var (
 	filesDir            = "./files"
 	maxTopWords         = 10
 	hostClient          = "jsonplaceholder.typicode.com"
-	endpointClient      = "/users"
-	methodClient        = ""
 	schemeClient        = "https"
+	endpointClient      = "users"
+	methodClient        = ""
 	portServer          = ":8080"
-	endpointServerWords = "/words"
 	endpointServerJson  = "/json"
+	endpointServerWords = "/words"
 )
+
+func New() App {
+	return App{
+		filesDir:            findFilesDir(),
+		maxTopWords:         maxTopWords,
+		hostClient:          hostClient,
+		schemeClient:        schemeClient,
+		endpointClient:      endpointClient,
+		methodClient:        methodClient,
+		portServer:          portServer,
+		endpointServerJson:  endpointServerJson,
+		endpointServerWords: endpointServerWords,
+	}
+}
+
+func findFilesDir() string {
+	l := len(os.Args)
+	if l > 1 {
+		filesDir = os.Args[l-1]
+	}
+	return filesDir
+}
 
 func main() {
 	initConfig()
@@ -79,14 +101,16 @@ func main() {
 func initConfig() {
 	name := flag.String("name", "гость", "имя пользователя")
 	flag.Parse()
-	nameUpLetter := strings.ToUpper(*name)
-	date := time.Now().Format("02-01-2006")
+	nameUpChars := strings.ToUpper(*name)
+	now := time.Now()
+	template := "02-01-2006"
+	fmt.Printf("\n%s, привет! Сегодня %v\n", nameUpChars, now.Format(template))
 
 	scanner := bufio.NewScanner(os.Stdin)
 	for {
-		fmt.Printf("%s, сегодня, %s, введите фразу с $ для старта сервиса:", nameUpLetter, date)
+		fmt.Printf("%s, введи фразу с $ для старта сервиса:\n", nameUpChars)
 		if !scanner.Scan() {
-			log.Println("Ошибка чтения:", scanner.Err())
+			log.Println("не удалось считать данные:", scanner.Err())
 		}
 		phrase := scanner.Text()
 		ok := findKey(phrase)
@@ -97,40 +121,21 @@ func initConfig() {
 	symbols := []string{"/", "|", "-", "\\"}
 	end := time.Now().Add(2 * time.Second)
 	for time.Now().Before(end) {
-		for _, el := range symbols {
-			fmt.Print("\rЗагрузка сервиса:" + el)
-			time.Sleep(150 * time.Millisecond)
+		for _, sym := range symbols {
+			fmt.Print("\rПроцесс загрузки:" + sym)
+			time.Sleep(200 * time.Millisecond)
 		}
 	}
-	fmt.Println("\rСервис запущен!     ")
+	fmt.Print("\rСервис загружен!     \n")
 	time.Sleep(1 * time.Second)
 }
 
 func findKey(phrase string) bool {
 	target := "$"
+	targetRune := '$'
+	idxTarget := strings.IndexRune(phrase, targetRune)
+	log.Println(idxTarget)
 	return strings.Contains(phrase, target)
-}
-
-func New() App {
-	return App{
-		filesDir:            findFilesDir(),
-		maxTopWords:         maxTopWords,
-		hostClient:          hostClient,
-		endpointClient:      endpointClient,
-		methodClient:        methodClient,
-		schemeClient:        schemeClient,
-		portServer:          portServer,
-		endpointServerWords: endpointServerWords,
-		endpointServerJson:  endpointServerJson,
-	}
-}
-
-func findFilesDir() string {
-	l := len(os.Args)
-	if l > 1 {
-		filesDir = os.Args[l-1]
-	}
-	return filesDir
 }
 
 func (a *App) Run() error {
@@ -145,7 +150,6 @@ func (a *App) Run() error {
 		}
 		a.wg.Add(1)
 		go func(entry fs.DirEntry) {
-			defer a.wg.Done()
 			allWords = a.findWords(allWords, entry)
 		}(fileEntry)
 	}
@@ -162,34 +166,35 @@ func (a *App) Run() error {
 		return frequencyWords[i].frequency > frequencyWords[j].frequency
 	})
 
-	var currFrequency, lastFrequency, topWords int
+	var currFrequency, lastFrequency, topWord int
 	var buf []string
 	results := make([]string, 0, a.maxTopWords)
 
 	for _, el := range frequencyWords {
-		if topWords > a.maxTopWords {
+		if topWord > a.maxTopWords {
 			break
 		}
 		currFrequency = el.frequency
 		if currFrequency != lastFrequency && len(buf) > 0 {
-			s := fmt.Sprintf("Топ №%d состоит из %d слов, встречающихся по %d р.: %s\n", topWords, len(buf), lastFrequency, buf)
+			s := fmt.Sprintf("Топ №%d состоит из %d слов, встречающихся по %d р.: %s\n", topWord, len(buf), lastFrequency, buf)
 			fmt.Print(s)
 			results = append(results, s)
 			buf = nil
 		}
 		if currFrequency != lastFrequency {
 			lastFrequency = currFrequency
-			topWords++
+			topWord++
 		}
 		buf = append(buf, el.word)
 	}
-	if len(buf) > 0 && topWords < a.maxTopWords+1 {
-		s := fmt.Sprintf("Топ №%d состоит из %d слов, встречающихся по %d р.\n", topWords, len(buf), lastFrequency)
+	if len(buf) > 0 && topWord > a.maxTopWords+1 {
+		s := fmt.Sprintf("Топ №%d состоит из %d слов, встречающихся по %d р.\n", topWord, len(buf), lastFrequency)
 		fmt.Print(s)
 		results = append(results, s)
 	}
 	result := strings.Join(results, "")
 	fPathRes, err := a.saveResult(result)
+
 	if err != nil {
 		return err
 	}
@@ -205,11 +210,12 @@ func (a *App) Run() error {
 }
 
 func (a *App) findWords(slice []string, entry fs.DirEntry) []string {
+	defer a.wg.Done()
 	fPath := filepath.Join(a.filesDir, entry.Name())
 	content, err := os.ReadFile(fPath)
 	if err != nil {
 		log.Println(err)
-		return slice
+		return nil
 	}
 	words := strings.FieldsFunc(string(content), func(r rune) bool {
 		return !unicode.IsLetter(r) && !unicode.IsNumber(r)
@@ -220,12 +226,12 @@ func (a *App) findWords(slice []string, entry fs.DirEntry) []string {
 	return slice
 }
 
-func (a *App) saveResult(res string) (string, error) {
+func (a *App) saveResult(result string) (string, error) {
 	h := sha1.New()
-	h.Write([]byte(res))
+	h.Write([]byte(result))
 	hash := fmt.Sprintf("%x", h.Sum(nil))
 	fPath := filepath.Join(a.filesDir, hash)
-	err := os.WriteFile(fPath, []byte(res), perm)
+	err := os.WriteFile(fPath, []byte(result), perm)
 	if err != nil {
 		return "", err
 	}
@@ -240,35 +246,33 @@ func (a *App) createRequest() error {
 	}
 
 	query := url.Values{}
-	query.Add("_limit", "5")
-
+	query.Add("_limit", "3")
 	u.RawQuery = query.Encode()
-	log.Println(u.String())
-
+	fmt.Println(u.String())
+	fmt.Println()
 	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
 	if err != nil {
 		return err
 	}
-
 	client := &http.Client{}
 
-	start := time.Now()
+	startConnection := time.Now()
 	resp, err := client.Do(req)
-	end := time.Now()
+	endConnection := time.Now()
 	if err != nil {
 		return err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	log.Println(resp.Status, end.Sub(start))
+
+	log.Println(resp.Status, endConnection.Sub(startConnection))
 
 	var data []map[string]interface{}
 	err = json.NewDecoder(resp.Body).Decode(&data)
 	if err != nil {
 		return err
 	}
-
-	for _, el := range data {
-		s := fmt.Sprintf("Имя: %v; телефон: %v; почта: %v\n", el["name"], el["phone"], el["email"])
+	for _, user := range data {
+		s := fmt.Sprintf("Имя: %v, телефон: %v, почта: %v\n", user["name"], user["phone"], user["email"])
 		fmt.Print(s)
 		fmt.Println(strings.Repeat("*", 25))
 	}
@@ -281,8 +285,9 @@ func (a *App) createServer(path string) error {
 
 	http.HandleFunc(a.endpointServerWords, handlerWords)
 	http.HandleFunc(a.endpointServerJson, handlerJson)
+	http.HandleFunc("/", handleTime)
 
-	log.Println("Запускаем сервер:")
+	log.Println("Слушаем порт:")
 	err := http.ListenAndServe(a.portServer, nil)
 	if err != nil {
 		return err
@@ -291,12 +296,12 @@ func (a *App) createServer(path string) error {
 }
 
 func handleWords(w http.ResponseWriter, r *http.Request, path string) {
-	log.Println("Получен запрос методом:", r.Method)
+	log.Println("Получен запрос с хоста:", r.Host)
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	content, err := readFile(path)
 	if err != nil {
-		log.Println(err)
 		w.WriteHeader(http.StatusInternalServerError)
+		log.Println(err)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
@@ -304,24 +309,25 @@ func handleWords(w http.ResponseWriter, r *http.Request, path string) {
 }
 
 func handleJson(w http.ResponseWriter, r *http.Request, path string) {
-	log.Println("Получен запрос с хоста:", r.Host)
+	log.Println("Получен запрос с методом:", r.Method)
 	w.Header().Set("Content-Type", "application/json")
 	content, err := readFile(path)
 	if err != nil {
-		log.Println(err)
 		w.WriteHeader(http.StatusInternalServerError)
+		log.Println(err)
 		return
 	}
+
 	data := Response{
-		Proto:    r.Proto,
-		FileName: path,
-		Result:   string(content),
+		Proto:  r.Proto,
+		Path:   path,
+		Result: string(content),
 	}
 
 	dataJson, err := json.Marshal(data)
 	if err != nil {
-		log.Println(err)
 		w.WriteHeader(http.StatusInternalServerError)
+		log.Println(err)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
@@ -346,4 +352,10 @@ func isExistFile(path string) error {
 		return err
 	}
 	return nil
+}
+
+func handleTime(w http.ResponseWriter, r *http.Request) {
+	now := time.Now().Format("02-01-2006")
+	log.Println("Получен запрос с мэйджорпрото:", r.ProtoMajor)
+	w.Write([]byte(now))
 }
