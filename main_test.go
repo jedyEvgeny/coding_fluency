@@ -12,15 +12,15 @@ func TestFindWords(t *testing.T) {
 	tempDir := t.TempDir()
 	content := []string{
 		"БИМ бом",
-		"диН Дон",
-		"кин, !кон",
-		"apple+banana",
+		"Дин доН",
+		"кин, ?кон",
+		"apple*banana",
 		"",
 		" ",
 		"	",
-		"1 -22 :333",
+		"1 -22 333_",
 	}
-	expectedSlice := []string{"БИМ", "бом", "диН", "Дон", "кин", "кон", "apple", "banana", "1", "22", "333"}
+	expectedWords := []string{"БИМ", "бом", "Дин", "доН", "кин", "кон", "apple", "banana", "1", "22", "333"}
 	for idx, el := range content {
 		fName := fmt.Sprintf("%d.txt", idx)
 		fPath := filepath.Join(tempDir, fName)
@@ -30,44 +30,32 @@ func TestFindWords(t *testing.T) {
 		}
 	}
 	var allWords []string
+	a := App{filesDir: tempDir}
 	filesList, err := os.ReadDir(tempDir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := App{
-		filesDir: tempDir,
-	}
 	for _, entry := range filesList {
-		a.wg.Add(1)
 		allWords = a.findWords(allWords, entry)
 	}
-	a.wg.Wait()
-	if !reflect.DeepEqual(expectedSlice, allWords) {
-		t.Errorf("Ожидалось \n%s,\nПолучили \n%s\n", expectedSlice, allWords)
+	if !reflect.DeepEqual(expectedWords, allWords) {
+		t.Errorf("Ожидалось:\n%s,\nполучили:\n%s\n", expectedWords, allWords)
 	}
 }
 
-//	Запуск: go test -bench=. -v	
-//	func BenchmarkFindWords(b *testing.B) {
-// 	dir := "./files"
+func BenchmarkFindWords(b *testing.B) {
+	dir := "./files"
+	a := App{filesDir: dir}
+	filesList, err := os.ReadDir(a.filesDir)
+	if err != nil {
+		b.Fatal(err)
+	}
+	var allWords []string
 
-// 	var allWords []string
-// 	filesList, err := os.ReadDir(dir)
-// 	if err != nil {
-// 		b.Fatal(err)
-// 	}
-
-// 	a := App{
-// 		filesDir: dir,
-// 	}
-
-// 	// Запускаем бенчмарк
-// 	for i := 0; i < b.N; i++ {
-// 		allWords = allWords[:0] // Сбрасываем slice
-// 		for _, entry := range filesList {
-// 			a.wg.Add(1)
-// 			allWords = a.findWords(allWords, entry)
-// 		}
-// 		a.wg.Wait()
-// 	}
-// }
+	for i := 0; i < b.N; i++ {
+		allWords = allWords[:0]
+		for _, entry := range filesList {
+			allWords = a.findWords(allWords, entry)
+		}
+	}
+}
