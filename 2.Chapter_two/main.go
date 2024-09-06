@@ -1,39 +1,42 @@
 //Это вторая часть codding-fluency: довожу до автоматизма навык работы с реляционными базами данных
 //Начну с основ - SQLite: создание-изменение-удаление таблиц и БД
+//Лучшее время набора 4 мин 42 сек.
 
 
 package main
 
 import (
 	"database/sql"
+	"fmt"
 	"log"
 
 	_ "github.com/mattn/go-sqlite3"
 )
 
-const dbName = "go-engeneer.db"
-
 func main() {
-
-	initDatabase()
-}
-
-func initDatabase() {
-	db, err := sql.Open("sqlite3", dbName)
+	err := initDataBase()
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer db.Close()
+	log.Println("База данных создана")
+}
+
+func initDataBase() error {
+	db, err := sql.Open("sqlite3", "go-engenier.db")
+	if err != nil {
+		return fmt.Errorf("не смогли открыть БД: %w", err)
+	}
+	defer func() { _ = db.Close() }()
 
 	err = db.Ping()
 	if err != nil {
-		log.Fatalf("Ошибка при подключении к базе данных: %v", err)
+		return fmt.Errorf("не смогли подключиться к БД: %w", err)
 	}
-	log.Printf("Соединение с БД %s установлено\n", dbName)
 
-	sqlStmt := `CREATE TABLE IF NOT EXISTS items (id INTEGER PRIMARY KEY, name TEXT, price FLOAT);`
+	sqlStmt := `CREATE TABLE IF NOT EXISTS items(id INTEGER PRIMARY KEY, name VARCHAR, cost FLOAT);`
 	_, err = db.Exec(sqlStmt)
 	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("не смогли создать таблицу: %w", err)
 	}
+	return nil
 }
