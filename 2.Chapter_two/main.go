@@ -13,12 +13,6 @@ import (
 
 const dbName = "go-engeneer.db"
 
-type Item struct {
-	ID    int
-	Name  string
-	Price float64
-}
-
 func main() {
 
 	initDatabase()
