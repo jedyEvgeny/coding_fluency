@@ -1,6 +1,6 @@
 //Это вторая часть codding-fluency: довожу до автоматизма навык работы с реляционными базами данных
 //Начну с основ - SQLite: создание-изменение-удаление таблиц и БД
-//Лучшее время набора 9 мин 32 сек
+//Лучшее время набора 19 мин 19 сек
 
 package main
 
@@ -12,45 +12,58 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
+type data struct {
+	name string
+	id   int
+	cost float64
+}
+
 var (
-	nameDB   = "go-db.db"
-	driverDB = "sqlite3"
+	dbName = "go-db.db"
+	driver = "sqlite3"
 )
 
 func main() {
-	err := initDataBase()
+	err := initDatabase()
 	if err != nil {
-		log.Fatal("не удалось создать БД: %w", err)
+		log.Fatal(err)
 	}
-	err = insertItem("Orange", 159.99)
+	err = insertItem("Orange", 152.99)
 	if err != nil {
-		log.Fatal("не удалось создать запись в БД: %w", err)
+		log.Fatal(err)
+	}
+	err = insertItem("Яблоко", 165.35)
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = info()
+	if err != nil {
+		log.Fatal(err)
 	}
 }
 
-func initDataBase() error {
-	db, err := sql.Open(driverDB, nameDB)
+func initDatabase() error {
+	db, err := sql.Open(driver, dbName)
 	if err != nil {
-		return fmt.Errorf("не удалось открыть БД: %w", err)
+		return fmt.Errorf("не смогли открыть БД %s: %w", dbName, err)
 	}
 	defer func() { _ = db.Close() }()
 
 	request := `
 	CREATE TABLE IF NOT EXISTS items
-	(id INTEGER PRYMARI KEY, name VARCHAR, cost FLOAT);
+	(id INTEGER PRIMARY KEY, name TEXT, cost FLOAT)
 	`
-
 	if _, err = db.Exec(request); err != nil {
-		return fmt.Errorf("не удалось создать таблицу в БД %s: %w", nameDB, err)
+		return fmt.Errorf("не смогли создать таблицу в БД %s: %w", dbName, err)
 	}
-	log.Println("Таблица в БД создана")
+	log.Println("Создали таблицу в БД", dbName)
 	return nil
 }
 
 func insertItem(name string, cost float64) error {
-	db, err := sql.Open(driverDB, nameDB)
+	db, err := sql.Open(driver, dbName)
 	if err != nil {
-		return fmt.Errorf("не удалось открыть БД: %w", err)
+		return fmt.Errorf("не смогли открыть БД %s: %w", dbName, err)
 	}
 	defer func() { _ = db.Close() }()
 
@@ -59,48 +72,45 @@ func insertItem(name string, cost float64) error {
 	(name, cost)
 	VALUES(?,?)
 	`
-	stmtSql, err := db.Prepare(request)
+	sqlStmt, err := db.Prepare(request)
 	if err != nil {
-		return fmt.Errorf("не удалось подготовить запрос к БД %s: %w", name, err)
+		return fmt.Errorf("не удалось подготовить запрос к БД %s: %w", dbName, err)
 	}
 
-	if _, err = stmtSql.Exec(name, cost); err != nil {
-		return fmt.Errorf("не удалось выполнить запрос в БД %s: %w", nameDB, err)
+	if _, err = sqlStmt.Exec(name, cost); err != nil {
+		return fmt.Errorf("не удалось добавить информацию в БД %s: %w", dbName, err)
 	}
-	log.Printf("вставка в БД %s выполнена\n", nameDB)
+	log.Println("информация успешно добавлена в БД", dbName)
 	return nil
 }
 
-// type Item struct {
-// 	ID   int
-// 	Name string
-// 	Cost float64
-// }
+func info() error {
+	db, err := sql.Open(driver, dbName)
+	if err != nil {
+		return fmt.Errorf("не смогли открыть БД %s: %w", dbName, err)
+	}
+	defer func() { _ = db.Close() }()
 
-// func read() error {
-// 	db, err := sql.Open(driver, dbName)
-// 	if err != nil {
-// 		return fmt.Errorf("не смогли открыть БД %s: %w", dbName, err)
-// 	}
-// 	defer func() { _ = db.Close() }()
-// 	request := `
-// 	SELECT id, name, cost FROM items
-// 	`
-// 	rows, err := db.Query(request)
-// 	if err != nil {
-// 		return fmt.Errorf("не удалось получить данные из БД %s: %w", dbName, err)
-// 	}
-// 	defer func() { _ = rows.Close() }()
-// 	var items []Item
-// 	for rows.Next() {
-// 		var item Item
-// 		if err = rows.Scan(&item.ID, &item.Name, &item.Cost); err != nil {
-// 			return fmt.Errorf("не удалось получить данные из БД %s: %w", dbName, err)
-// 		}
-// 		items = append(items, item)
-// 	}
-// 	for _, item := range items {
-// 		fmt.Printf("ID: %d; наименование: %s; цена: %.2f\n", item.ID, item.Name, item.Cost)
-// 	}
-// 	return nil
-// }
+	request := `
+	SELECT id, name, cost 
+	FROM items
+	`
+	rows, err := db.Query(request)
+	if err != nil {
+		return fmt.Errorf("не смогли выполнить запрос к БД %s: %w", dbName, err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	items := []data{}
+	for rows.Next() {
+		var item data
+		if err = rows.Scan(&item.id, &item.name, &item.cost); err != nil {
+			return fmt.Errorf("не смогли прочитать данные из БД %s: %w", dbName, err)
+		}
+		items = append(items, item)
+	}
+	for _, item := range items {
+		fmt.Printf("ID: %d, наименование: %s, цена товара: %.2f\n", item.id, item.name, item.cost)
+	}
+	return nil
+}
