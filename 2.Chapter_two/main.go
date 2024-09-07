@@ -1,7 +1,6 @@
 //Это вторая часть codding-fluency: довожу до автоматизма навык работы с реляционными базами данных
 //Начну с основ - SQLite: создание-изменение-удаление таблиц и БД
-//Лучшее время набора 4 мин 42 сек.
-
+//Лучшее время набора 9 мин 32 сек
 
 package main
 
@@ -13,29 +12,61 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
+var (
+	nameDB   = "go-db.db"
+	driverDB = "sqlite3"
+)
+
 func main() {
 	err := initDataBase()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("не удалось создать БД: %w", err)
 	}
-	log.Println("БД успешно создана")
+	err = insertItem("Orange", 159.99)
+	if err != nil {
+		log.Fatal("не удалось создать запись в БД: %w", err)
+	}
 }
 
 func initDataBase() error {
-	db, err := sql.Open("sqlite3", "go-db.db")
+	db, err := sql.Open(driverDB, nameDB)
 	if err != nil {
-		return fmt.Errorf("не смогли открыть БД: %w", err)
+		return fmt.Errorf("не удалось открыть БД: %w", err)
 	}
 	defer func() { _ = db.Close() }()
 
-	if err = db.Ping(); err != nil {
-		return fmt.Errorf("не смогли установить связь с БД: %w", err)
+	request := `
+	CREATE TABLE IF NOT EXISTS items
+	(id INTEGER PRYMARI KEY, name VARCHAR, cost FLOAT);
+	`
+
+	if _, err = db.Exec(request); err != nil {
+		return fmt.Errorf("не удалось создать таблицу в БД %s: %w", nameDB, err)
+	}
+	log.Println("Таблица в БД создана")
+	return nil
+}
+
+func insertItem(name string, cost float64) error {
+	db, err := sql.Open(driverDB, nameDB)
+	if err != nil {
+		return fmt.Errorf("не удалось открыть БД: %w", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	request := `
+	INSERT INTO items
+	(name, cost)
+	VALUES(?,?)
+	`
+	stmtSql, err := db.Prepare(request)
+	if err != nil {
+		return fmt.Errorf("не удалось подготовить запрос к БД %s: %w", name, err)
 	}
 
-	sqlStmt := `CREATE TABLE IF NOT EXISTS items(id INTEGER PRIMARY KEY, name VARCHAR, cost FLOAT);`
-	if _, err = db.Exec(sqlStmt); err != nil {
-		return fmt.Errorf("не смогли создать таблицу в БД: %w", err)
+	if _, err = stmtSql.Exec(name, cost); err != nil {
+		return fmt.Errorf("не удалось выполнить запрос в БД %s: %w", nameDB, err)
 	}
-
+	log.Printf("вставка в БД %s выполнена\n", nameDB)
 	return nil
 }
