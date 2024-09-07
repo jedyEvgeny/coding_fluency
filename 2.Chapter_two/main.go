@@ -18,25 +18,24 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Println("База данных создана")
+	log.Println("БД успешно создана")
 }
 
 func initDataBase() error {
-	db, err := sql.Open("sqlite3", "go-engenier.db")
+	db, err := sql.Open("sqlite3", "go-db.db")
 	if err != nil {
 		return fmt.Errorf("не смогли открыть БД: %w", err)
 	}
 	defer func() { _ = db.Close() }()
 
-	err = db.Ping()
-	if err != nil {
-		return fmt.Errorf("не смогли подключиться к БД: %w", err)
+	if err = db.Ping(); err != nil {
+		return fmt.Errorf("не смогли установить связь с БД: %w", err)
 	}
 
 	sqlStmt := `CREATE TABLE IF NOT EXISTS items(id INTEGER PRIMARY KEY, name VARCHAR, cost FLOAT);`
-	_, err = db.Exec(sqlStmt)
-	if err != nil {
-		return fmt.Errorf("не смогли создать таблицу: %w", err)
+	if _, err = db.Exec(sqlStmt); err != nil {
+		return fmt.Errorf("не смогли создать таблицу в БД: %w", err)
 	}
+
 	return nil
 }
