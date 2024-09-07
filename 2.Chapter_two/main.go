@@ -70,3 +70,37 @@ func insertItem(name string, cost float64) error {
 	log.Printf("вставка в БД %s выполнена\n", nameDB)
 	return nil
 }
+
+// type Item struct {
+// 	ID   int
+// 	Name string
+// 	Cost float64
+// }
+
+// func read() error {
+// 	db, err := sql.Open(driver, dbName)
+// 	if err != nil {
+// 		return fmt.Errorf("не смогли открыть БД %s: %w", dbName, err)
+// 	}
+// 	defer func() { _ = db.Close() }()
+// 	request := `
+// 	SELECT id, name, cost FROM items
+// 	`
+// 	rows, err := db.Query(request)
+// 	if err != nil {
+// 		return fmt.Errorf("не удалось получить данные из БД %s: %w", dbName, err)
+// 	}
+// 	defer func() { _ = rows.Close() }()
+// 	var items []Item
+// 	for rows.Next() {
+// 		var item Item
+// 		if err = rows.Scan(&item.ID, &item.Name, &item.Cost); err != nil {
+// 			return fmt.Errorf("не удалось получить данные из БД %s: %w", dbName, err)
+// 		}
+// 		items = append(items, item)
+// 	}
+// 	for _, item := range items {
+// 		fmt.Printf("ID: %d; наименование: %s; цена: %.2f\n", item.ID, item.Name, item.Cost)
+// 	}
+// 	return nil
+// }
