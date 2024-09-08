@@ -1,7 +1,6 @@
 //Это вторая часть codding-fluency: довожу до автоматизма навык работы с реляционными базами данных
 //Начну с основ - SQLite: создание-изменение-удаление таблиц и БД
-//Лучшее время набора 18 мин 24 сек
-
+//Лучшее время набора 29 мин
 package main
 
 import (
@@ -12,105 +11,153 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-type data struct {
-	name string
-	id   int
-	cost float64
+type App struct {
+	dbName    string
+	sqlDriver string
+	db        *sql.DB
 }
 
-var (
-	dbName = "go-db.db"
-	driver = "sqlite3"
-)
+type Item struct {
+	id    int
+	name  string
+	price float64
+}
 
 func main() {
-	err := initDatabase()
-	if err != nil {
-		log.Fatal(err)
-	}
-	err = insertItem("Orange", 152.99)
-	if err != nil {
-		log.Fatal(err)
-	}
-	err = insertItem("Яблоко", 165.35)
-	if err != nil {
-		log.Fatal(err)
-	}
-	err = info()
+	a := New()
+	err := a.Run()
 	if err != nil {
 		log.Fatal(err)
 	}
 }
 
-func initDatabase() error {
-	db, err := sql.Open(driver, dbName)
+func New() App {
+	var (
+		dbName    = "go-db.db"
+		sqlDriver = "sqlite3"
+	)
+	db, err := initDataBase(dbName, sqlDriver)
 	if err != nil {
-		return fmt.Errorf("не смогли открыть БД %s: %w", dbName, err)
+		log.Fatal(err)
 	}
-	defer func() { _ = db.Close() }()
+	return App{
+		dbName:    dbName,
+		sqlDriver: sqlDriver,
+		db:        db,
+	}
+}
+
+func initDataBase(dbName, sqlDriver string) (*sql.DB, error) {
+	db, err := sql.Open(sqlDriver, dbName)
+	if err != nil {
+		return nil, fmt.Errorf("не удалось открыть БД %s: %w", dbName, err)
+	}
+	if err = db.Ping(); err != nil {
+		return nil, fmt.Errorf("не удалось выполнить пинг к БД %s: %w", dbName, err)
+	}
 
 	request := `
 	CREATE TABLE IF NOT EXISTS items
-	(id INTEGER PRIMARY KEY, name TEXT, cost FLOAT)
+	(id INTEGER PRIMARY KEY, name TEXT, price FLOAT)
 	`
 	if _, err = db.Exec(request); err != nil {
-		return fmt.Errorf("не смогли создать таблицу в БД %s: %w", dbName, err)
+		return nil, fmt.Errorf("не удалось создать таблицу в БД %s: %w", dbName, err)
 	}
-	log.Println("Создали таблицу в БД", dbName)
+	log.Println("БД и таблица успешно созданы")
+	return db, nil
+}
+
+func (a App) Run() error {
+	defer func() { _ = a.db.Close() }()
+
+	err := a.insertItem("Orange", 129.99)
+	if err != nil {
+		log.Println("не смогли добавить запись в БД", err)
+	}
+	err = a.insertItem("Rastberries", 269.99)
+	if err != nil {
+		log.Println("не смогли добавить запись в БД", err)
+	}
+
+	err = a.data()
+	if err != nil {
+		log.Println("не смогли прочесть БД", err)
+	}
+
+	err = a.ipdateItem("Rastberries", 529.90)
+	if err != nil {
+		log.Println("не удалось изменить данные", err)
+	}
+
 	return nil
 }
 
-func insertItem(name string, cost float64) error {
-	db, err := sql.Open(driver, dbName)
-	if err != nil {
-		return fmt.Errorf("не смогли открыть БД %s: %w", dbName, err)
-	}
-	defer func() { _ = db.Close() }()
-
+func (a App) insertItem(name string, price float64) error {
 	request := `
 	INSERT INTO items
-	(name, cost)
-	VALUES(?,?)
+	(name, price)
+	VALUES (:name, :price)
 	`
-	sqlStmt, err := db.Prepare(request)
+	sqlStmt, err := a.db.Prepare(request)
 	if err != nil {
-		return fmt.Errorf("не удалось подготовить запрос к БД %s: %w", dbName, err)
+		return fmt.Errorf("не создать запрос к БД %s: %w", a.dbName, err)
 	}
+	defer func() { _ = sqlStmt.Close() }()
 
-	if _, err = sqlStmt.Exec(name, cost); err != nil {
-		return fmt.Errorf("не удалось добавить информацию в БД %s: %w", dbName, err)
+	_, err = sqlStmt.Exec(
+		sql.Named("name", name),
+		sql.Named("price", price),
+	)
+	if err != nil {
+		return fmt.Errorf("не смогли исполнить запрос к БД %s: %w", a.dbName, err)
 	}
-	log.Println("информация успешно добавлена в БД", dbName)
+	log.Println("вставка прошла успешно")
 	return nil
 }
 
-func info() error {
-	db, err := sql.Open(driver, dbName)
-	if err != nil {
-		return fmt.Errorf("не смогли открыть БД %s: %w", dbName, err)
-	}
-	defer func() { _ = db.Close() }()
-
+func (a App) data() error {
 	request := `
-	SELECT id, name, cost 
+	SELECT id, name, price
 	FROM items
 	`
-	rows, err := db.Query(request)
+	rows, err := a.db.Query(request)
 	if err != nil {
-		return fmt.Errorf("не смогли выполнить запрос к БД %s: %w", dbName, err)
+		return fmt.Errorf("не смогли извлечь инфо из БД %s: %w", a.dbName, err)
 	}
-	defer func() { _ = rows.Close() }()
-
-	items := []data{}
+	item := Item{}
 	for rows.Next() {
-		var item data
-		if err = rows.Scan(&item.id, &item.name, &item.cost); err != nil {
-			return fmt.Errorf("не смогли прочитать данные из БД %s: %w", dbName, err)
+		err = rows.Scan(&item.id, &item.name, &item.price)
+		if err != nil {
+			log.Println(err)
+			continue
 		}
-		items = append(items, item)
+		fmt.Println(item)
 	}
-	for _, item := range items {
-		fmt.Printf("ID: %d, наименование: %s, цена товара: %.2f\n", item.id, item.name, item.cost)
+	if err = rows.Err(); err != nil {
+		return fmt.Errorf("неполное чтение данных из БД %s: %w", a.dbName, err)
 	}
+	return nil
+}
+
+func (a App) ipdateItem(name string, price float64) error {
+	request := `
+	UPDATE items 
+	SET price = :price
+	WHERE name = :name
+	`
+	sqlStmt, err := a.db.Prepare(request)
+	if err != nil {
+		return fmt.Errorf("не удалось подготовить запрос для изменения БД %s: %w", a.dbName, err)
+	}
+	defer func() { _ = sqlStmt.Close() }()
+
+	_, err = sqlStmt.Exec(
+		sql.Named("name", name),
+		sql.Named("price", price),
+	)
+	if err != nil {
+		return fmt.Errorf("не удалось изменить БД %s: %w", a.dbName, err)
+	}
+	log.Println("данные изменены")
 	return nil
 }
