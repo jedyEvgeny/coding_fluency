@@ -1,6 +1,6 @@
 //Это вторая часть codding-fluency: довожу до автоматизма навык работы с реляционными базами данных
 //Начну с основ - SQLite: создание-изменение-удаление таблиц и БД
-//Лучшее время набора 45 мин
+//Лучшее время набора 34 мин
 package main
 
 import (
@@ -28,12 +28,12 @@ type Item struct {
 }
 
 const (
-	prepareErr   = "ошибка подготовки запроса: %w"
-	execErr      = "ошибка исполнения sql-команды: %w"
-	affErr       = "ошибка чтения количества изменённых строк: %w"
-	amountAffErr = "нет изменённых строк: %w"
-	readErr      = "ошибка чтения: %w"
-	readCicleErr = "ошибка чтения в цикле: %w"
+	errStmt        = "не удалось подготовить выражение: %w"
+	errExec        = "не удалось выполнить выражение: %w"
+	errAff         = "не удалось получить количество изменённых строк: %w"
+	errCounAff     = "нет изменений в БД: %w"
+	errRead        = "не удалось прочитать данные: %w"
+	errReadInCycle = "не удалось прочитать данные в цикле: %w"
 )
 
 func main() {
@@ -46,9 +46,9 @@ func main() {
 
 func mustNew() App {
 	var (
-		name    = "go-sql.db"
+		name    = "dbsql.db"
 		driver  = "sqlite3"
-		timeout = 50
+		timeout = 1000
 	)
 	db, err := initDatabase(name, driver, timeout)
 	if err != nil {
@@ -68,18 +68,18 @@ func initDatabase(name, driver string, timeout int) (*sql.DB, error) {
 		return nil, fmt.Errorf("не удалось открыть БД %s: %w", name, err)
 	}
 	request := `
-	CREATE TABLE IF NOT EXISTS items
-	(id INTEGER PRIMARY KEY, name TEXT, price FLOAT);
+	CREATE TABLE IF NOT EXISTS
+	items (id INTEGER PRIMARY KEY, name TEXT, price FLOAT);
 	CREATE INDEX IF NOT EXISTS idx_items_name ON items(name)
 	`
 	sqlStmt, err := db.Prepare(request)
 	if err != nil {
-		return nil, fmt.Errorf("не удалось создать запрос: %w", err)
+		return nil, fmt.Errorf(errStmt, err)
 	}
 	defer func() { _ = sqlStmt.Close() }()
 
 	if _, err = sqlStmt.Exec(); err != nil {
-		return nil, fmt.Errorf("не удалось создать таблицу в БД %s: %w", name, err)
+		return nil, fmt.Errorf(errExec, err)
 	}
 	log.Println("таблица создана")
 	return db, nil
@@ -93,9 +93,9 @@ func (a *App) Run() error {
 	defer func() { _ = a.db.Close() }()
 
 	items := []Item{
-		{Name: "Апельсин", Price: 129.90},
-		{Name: "Ананас", Price: 239.90},
-		{Name: "Авокадо", Price: 333.33},
+		{Name: "Вино", Price: 8995.95},
+		{Name: "Медовуха", Price: 699.95},
+		{Name: "Коньяк", Price: 12000.95},
 	}
 	var errors []error
 	for _, item := range items {
@@ -107,31 +107,30 @@ func (a *App) Run() error {
 				a.mu.Lock()
 				errors = append(errors, err)
 				a.mu.Unlock()
-
 			}
 		}(item)
 	}
 	a.wg.Wait()
 	if len(errors) > 0 {
 		for _, err := range errors {
-			log.Printf("ошибка вставки в БД %s: %v\n", a.dbName, err)
+			log.Printf("не удалось выполнить вставку в БД %s: %v\n", a.dbName, err)
 		}
 		return fmt.Errorf("количество ошибок вставки: %d", len(errors))
 	}
 
-	err := a.updateItem("Апельсин", 99.99)
+	err := a.updateItem("Вино", 7999.80)
 	if err != nil {
-		return fmt.Errorf("не удалось обновить строку в БД %s: %w", a.dbName, err)
+		return fmt.Errorf("не удалось обновить данные в БД %s: %w", a.dbName, err)
 	}
 
-	err = a.deleteItem(12)
+	err = a.deleteItem(15)
 	if err != nil {
-		return fmt.Errorf("не удалось удалить строку в БД %s: %w", a.dbName, err)
+		return fmt.Errorf("не удалось удалить данные в БД %s: %w", a.dbName, err)
 	}
 
 	err = a.readItems()
 	if err != nil {
-		return fmt.Errorf("не удалось прочитать БД %s: %w", a.dbName, err)
+		return fmt.Errorf("не удалось прочитать данные из БД %s: %w", a.dbName, err)
 	}
 
 	return nil
@@ -141,41 +140,34 @@ func (a *App) insertItem(name string, price float64) error {
 	request := `
 	INSERT INTO items
 	(name, price)
-	VALUES (:name, :price)
+	VALUES(:name, :price)
 	`
 	sqlStmt, err := a.db.Prepare(request)
 	if err != nil {
-		return fmt.Errorf(prepareErr, err)
+		return fmt.Errorf(errStmt, err)
 	}
 	defer func() { _ = sqlStmt.Close() }()
 
-	res, err := sqlStmt.Exec(
+	_, err = sqlStmt.Exec(
 		sql.Named("name", name),
 		sql.Named("price", price),
 	)
 	if err != nil {
-		return fmt.Errorf(execErr, err)
+		return fmt.Errorf(errExec, err)
 	}
-	resAffected, err := res.RowsAffected()
-	if err != nil {
-		return fmt.Errorf(affErr, err)
-	}
-	if resAffected == 0 {
-		return fmt.Errorf(amountAffErr, err)
-	}
-	log.Println("вставка выполнена успешно")
+	log.Println("вставка выполнена")
 	return nil
 }
 
 func (a *App) updateItem(name string, price float64) error {
 	request := `
-UPDATE items
-SET price=:price
-WHERE name=:name
-`
+	UPDATE items
+	SET price=:price
+	WHERE name=:name
+	`
 	sqlStmt, err := a.db.Prepare(request)
 	if err != nil {
-		return fmt.Errorf(prepareErr, err)
+		return fmt.Errorf(errStmt, err)
 	}
 	defer func() { _ = sqlStmt.Close() }()
 
@@ -184,27 +176,27 @@ WHERE name=:name
 		sql.Named("price", price),
 	)
 	if err != nil {
-		return fmt.Errorf(execErr, err)
+		return fmt.Errorf(errExec, err)
 	}
 	resAffected, err := res.RowsAffected()
 	if err != nil {
-		return fmt.Errorf(affErr, err)
+		return fmt.Errorf(errAff, err)
 	}
 	if resAffected == 0 {
-		return fmt.Errorf(amountAffErr, err)
+		return fmt.Errorf(errCounAff, err)
 	}
-	log.Println("изменение выполнено успешно")
+	log.Println("обновление выполнено")
 	return nil
 }
 
 func (a *App) deleteItem(id int) error {
 	request := `
-DELETE FROM items
-WHERE id=:id
-`
+	DELETE FROM items
+	WHERE id=:id
+	`
 	sqlStmt, err := a.db.Prepare(request)
 	if err != nil {
-		return fmt.Errorf(prepareErr, err)
+		return fmt.Errorf(errStmt, err)
 	}
 	defer func() { _ = sqlStmt.Close() }()
 
@@ -212,46 +204,45 @@ WHERE id=:id
 		sql.Named("id", id),
 	)
 	if err != nil {
-		return fmt.Errorf(execErr, err)
+		return fmt.Errorf(errExec, err)
 	}
 	resAffected, err := res.RowsAffected()
 	if err != nil {
-		return fmt.Errorf(affErr, err)
+		return fmt.Errorf(errAff, err)
 	}
 	if resAffected == 0 {
-		return fmt.Errorf(amountAffErr, err)
+		return fmt.Errorf(errCounAff, err)
 	}
-	log.Println("удаление выполнено успешно")
+	log.Println("удаление выполнено")
 	return nil
 }
 
 func (a *App) readItems() error {
 	request := `
-SELECT id, name, price
-FROM items
-`
+	SELECT id, name, price
+	FROM items
+	`
 	sqlStmt, err := a.db.Prepare(request)
 	if err != nil {
-		return fmt.Errorf(prepareErr, err)
+		return fmt.Errorf(errStmt, err)
 	}
 	defer func() { _ = sqlStmt.Close() }()
 
 	rows, err := sqlStmt.Query()
 	if err != nil {
-		return fmt.Errorf(readErr, err)
+		return fmt.Errorf(errRead, err)
 	}
 	for rows.Next() {
 		item := Item{}
 		err = rows.Scan(&item.ID, &item.Name, &item.Price)
 		if err != nil {
-			return fmt.Errorf(readCicleErr, err)
+			return fmt.Errorf(errReadInCycle, err)
 		}
 		fmt.Printf("id: %d, товар: %s, цена: %.2f\n", item.ID, item.Name, item.Price)
 	}
 	if err = rows.Err(); err != nil {
-		return fmt.Errorf("ошибка целостности данных: %w", err)
+		return fmt.Errorf("целостность данных нарушена: %w", err)
 	}
-
-	log.Println("чтение выполнено успешно")
+	log.Println("чтение выполнено")
 	return nil
 }
