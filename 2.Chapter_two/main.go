@@ -1,6 +1,76 @@
 //Это вторая часть codding-fluency: довожу до автоматизма навык работы с реляционными базами данных
 //Начну с основ - SQLite: создание-изменение-удаление таблиц и БД
 //Лучшее время набора 34 мин
+
+// package main
+
+// import (
+// 	"database/sql"
+// 	"log"
+
+// 	"github.com/golang-migrate/migrate/v4"
+// 	_ "github.com/golang-migrate/migrate/v4/database/sqlite3"
+// 	_ "github.com/golang-migrate/migrate/v4/source/file"
+// )
+
+// func main() {
+// 	db, err := sql.Open("sqlite3", "mydatabase.db")
+// 	if err != nil {
+// 		log.Fatal(err)
+// 	}
+// 	defer db.Close()
+
+// 	dbName := "sqlite3://mydatabase.db"
+// 	migrationPath := "file://migrations" // Используем относительный путь
+
+// 	// Создаем мигратор
+// 	m, err := migrate.New(migrationPath, dbName) // передаем правильный путь
+// 	if err != nil {
+// 		log.Fatal(err)
+// 	}
+
+// 	// Применяем миграции
+// 	if err = m.Up(); err != nil && err != migrate.ErrNoChange {
+// 		log.Fatal(err)
+// 	}
+// 	if err == migrate.ErrNoChange {
+// 		log.Println("миграции не требуются")
+
+// 	}
+// 	if err != migrate.ErrNoChange {
+// 		log.Println("миграции применены успешно!")
+// 	}
+
+// 	//Пробуем работать с БД
+// 	_, err = db.Exec("INSERT INTO items (name, price) VALUES (?, ?)", "Item2", 64.34)
+// 	if err != nil {
+// 		log.Fatalf("ошибка вставки: %v", err)
+// 	}
+
+// 	// Получить данные
+// 	rows, err := db.Query("SELECT id, name, price FROM items")
+// 	if err != nil {
+// 		log.Fatal(err)
+// 	}
+// 	defer rows.Close()
+
+// 	for rows.Next() {
+// 		var id int
+// 		var name string
+// 		var price float64
+// 		if err := rows.Scan(&id, &name, &price); err != nil {
+// 			log.Fatal(err)
+// 		}
+// 		log.Printf("Item: %d, Name: %s, Price: %.2f\n", id, name, price)
+// 	}
+
+// 	// Удалить элемент
+// 	_, err = db.Exec("DELETE FROM items WHERE name = ?", "Item1")
+// 	if err != nil {
+// 		log.Fatal(err)
+// 	}
+// }
+
 package main
 
 import (
