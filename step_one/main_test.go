@@ -1,3 +1,5 @@
+//Тест запускается компндой go test -v или go test
+//Бенчмарк запускать командой go test -bench .
 package main
 
 import (
